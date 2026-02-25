@@ -12,9 +12,8 @@ import {
   Dimensions,
   Linking,
 } from 'react-native';
-import { Search as SearchIcon, TrendingUp, TrendingDown, Building2, X, ExternalLink, Newspaper } from 'lucide-react-native';
+import { Search as SearchIcon, TrendingUp, TrendingDown, Building2, X, Newspaper } from 'lucide-react-native';
 import Svg, { Path, Line } from 'react-native-svg';
-import { useRouter } from 'expo-router';
 import { apiGet } from '../../lib/api';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
@@ -86,13 +85,11 @@ function InstrumentModal({
   item,
   searchNews,
   onClose,
-  onViewFull,
 }: {
   visible: boolean;
   item: any;
   searchNews: any[];
   onClose: () => void;
-  onViewFull: () => void;
 }) {
   const [detail, setDetail] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -178,27 +175,6 @@ function InstrumentModal({
                   </View>
                 </View>
 
-                {/* News */}
-                {detail.news && detail.news.length > 0 && (
-                  <View style={styles.modalNewsSection}>
-                    <Text style={styles.modalNewsSectionTitle}>Related news</Text>
-                    {detail.news.slice(0, 5).map((n: any, i: number) => (
-                      <Pressable
-                        key={`mnews-${i}`}
-                        style={styles.modalNewsRow}
-                        onPress={() => n.link && Linking.openURL(n.link)}
-                      >
-                        <View style={styles.modalNewsContent}>
-                          <Newspaper color="#888" size={14} style={{ marginTop: 2 }} />
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.modalNewsTitle} numberOfLines={2}>{n.title}</Text>
-                            <Text style={styles.modalNewsMeta}>{n.publisher || ''}</Text>
-                          </View>
-                        </View>
-                      </Pressable>
-                    ))}
-                  </View>
-                )}
               </>
             )}
 
@@ -244,42 +220,35 @@ function InstrumentModal({
                   </View>
                 )}
 
-                {/* News (from search results since MF endpoint has none) */}
-                {searchNews.length > 0 && (
-                  <View style={styles.modalNewsSection}>
-                    <Text style={styles.modalNewsSectionTitle}>Related news</Text>
-                    {searchNews.slice(0, 5).map((n: any, i: number) => (
-                      <Pressable
-                        key={`mnews-${i}`}
-                        style={styles.modalNewsRow}
-                        onPress={() => n.link && Linking.openURL(n.link)}
-                      >
-                        <View style={styles.modalNewsContent}>
-                          <Newspaper color="#888" size={14} style={{ marginTop: 2 }} />
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.modalNewsTitle} numberOfLines={2}>{n.title}</Text>
-                            <Text style={styles.modalNewsMeta}>{n.publisher || ''}</Text>
-                          </View>
-                        </View>
-                      </Pressable>
-                    ))}
-                  </View>
-                )}
               </>
+            )}
+
+            {/* Search-level news — shown for both equity and MF */}
+            {!loading && detail && searchNews.length > 0 && (
+              <View style={styles.modalNewsSection}>
+                <Text style={styles.modalNewsSectionTitle}>Related news</Text>
+                {searchNews.slice(0, 5).map((n: any, i: number) => (
+                  <Pressable
+                    key={`mnews-${i}`}
+                    style={styles.modalNewsRow}
+                    onPress={() => n.link && Linking.openURL(n.link)}
+                  >
+                    <View style={styles.modalNewsContent}>
+                      <Newspaper color="#888" size={14} style={{ marginTop: 2 }} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.modalNewsTitle} numberOfLines={2}>{n.title}</Text>
+                        <Text style={styles.modalNewsMeta}>{n.publisher || ''}</Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                ))}
+              </View>
             )}
 
             {!loading && !detail && (
               <Text style={styles.modalErrorText}>Unable to load details.</Text>
             )}
           </ScrollView>
-
-          {/* View full details CTA */}
-          {detail && (
-            <Pressable style={styles.modalCta} onPress={onViewFull}>
-              <ExternalLink color="#0a0d0b" size={16} />
-              <Text style={styles.modalCtaText}>View full details</Text>
-            </Pressable>
-          )}
         </Pressable>
       </Pressable>
     </Modal>
@@ -288,7 +257,6 @@ function InstrumentModal({
 
 /* ── Search screen ──────────────────────────────────────────────── */
 export default function SearchScreen() {
-  const router = useRouter();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [news, setNews] = useState<any[]>([]);
@@ -329,21 +297,6 @@ export default function SearchScreen() {
     setModalVisible(false);
     setSelectedItem(null);
   }, []);
-
-  const handleViewFull = useCallback(() => {
-    const item = selectedItem;
-    setModalVisible(false);
-    setSelectedItem(null);
-    if (!item) return;
-    // Delay navigation so the modal fully dismisses first
-    setTimeout(() => {
-      if (item.type === 'MUTUAL_FUND' && item.scheme_code) {
-        router.push(`/instrument/mf/${item.scheme_code}`);
-      } else if (item.symbol) {
-        router.push(`/instrument/${item.symbol}?exchange=${item.exchange || ''}`);
-      }
-    }, 300);
-  }, [selectedItem, router]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -419,7 +372,6 @@ export default function SearchScreen() {
         item={selectedItem}
         searchNews={news}
         onClose={handleCloseModal}
-        onViewFull={handleViewFull}
       />
     </SafeAreaView>
   );
@@ -749,19 +701,5 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 32,
   },
-  modalCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#a2b082',
-    borderRadius: 24,
-    paddingVertical: 14,
-    marginHorizontal: 24,
-  },
-  modalCtaText: {
-    color: '#0a0d0b',
-    fontSize: 14,
-    fontWeight: '600',
-  },
+
 });
