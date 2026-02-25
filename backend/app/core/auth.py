@@ -44,11 +44,13 @@ def _get_jwks() -> dict | None:
 
 
 def _verify_jwt_with_secret(token: str) -> dict:
-    """Verify JWT using the Supabase JWT secret (HMAC HS256)."""
+    """Verify JWT using the Supabase JWT secret."""
+    unverified_header = jwt.get_unverified_header(token)
+    alg = unverified_header.get("alg", "HS256")
     claims = jwt.decode(
         token,
         SUPABASE_JWT_SECRET,
-        algorithms=["HS256"],
+        algorithms=[alg],
         options={"verify_aud": False},
     )
     return claims
