@@ -208,47 +208,70 @@ def send_message(
 
     widgets: list[dict] = []
 
-    if contains_blocked_phrase(payload.content):
-        assistant_reply = safe_response(payload.content)
-    else:
-        holdings = (
-            supabase.table("holdings")
-            .select("*")
+    holdings = (
+        supabase.table("holdings")
+        .select("*")
+        .eq("user_id", user.user_id)
+        .execute()
+    ).data or []
+    portfolio = compute_portfolio(holdings)
+    memory = get_memory(user.user_id)
+
+    # Fetch recent chat history for conversational context
+    recent_history = (
+        supabase.table("chat_messages")
+        .select("role,content")
+        .eq("chat_id", chat_id)
+        .order("created_at", desc=True)
+        .limit(20)
+        .execute()
+    ).data or []
+    # Reverse so oldest is first, and exclude the message we just inserted
+    recent_history = list(reversed(recent_history))[:-1]  # drop last (the current user msg)
+
+    # Fetch risk profile for personalized prompt
+    risk_profile = None
+    try:
+        rp_result = (
+            supabase.table("risk_profiles")
+            .select("risk_level,risk_score")
             .eq("user_id", user.user_id)
+            .limit(1)
             .execute()
-        ).data or []
-        portfolio = compute_portfolio(holdings)
-        memory = get_memory(user.user_id)
-        # Fetch risk profile for personalized prompt
-        risk_profile = None
+        )
+        if rp_result.data:
+            risk_profile = rp_result.data[0]
+    except Exception:
+        pass
+    news_items: list[dict] = []
+    if _should_fetch_news(payload.content):
+        symbols = _extract_symbols_from_holdings(holdings, payload.content)
+        if symbols:
+            news_items = _collect_news(symbols)
+    prompt = _build_user_prompt(payload.content, memory, portfolio, news_items)
+    system_prompt = _build_system_prompt(risk_profile)
+    try:
+        assistant_reply, widgets = generate_response_with_tools(
+            system_prompt, prompt, chat_history=recent_history, tool_executor=_execute_tool
+        )
+        if not assistant_reply:
+            assistant_reply = ""
+        if contains_blocked_phrase(assistant_reply):
+            assistant_reply = safe_response(assistant_reply)
+            widgets = []
+        else:
+            assistant_reply = append_disclaimer(assistant_reply)
+    except GeminiNotConfigured:
+        assistant_reply = (
+            "AI is not configured yet. Please set GEMINI_API_KEY to enable chat responses.\n\n"
+            f"{ASSISTANT_DISCLAIMER}"
+        )
+    except Exception:
+        # Fallback to non-tool generation
         try:
-            rp_result = (
-                supabase.table("risk_profiles")
-                .select("risk_level,risk_score")
-                .eq("user_id", user.user_id)
-                .limit(1)
-                .execute()
-            )
-            if rp_result.data:
-                risk_profile = rp_result.data[0]
-        except Exception:
-            pass
-        news_items: list[dict] = []
-        if _should_fetch_news(payload.content):
-            symbols = _extract_symbols_from_holdings(holdings, payload.content)
-            if symbols:
-                news_items = _collect_news(symbols)
-        prompt = _build_user_prompt(payload.content, memory, portfolio, news_items)
-        system_prompt = _build_system_prompt(risk_profile)
-        try:
-            assistant_reply, widgets = generate_response_with_tools(
-                system_prompt, prompt, tool_executor=_execute_tool
-            )
-            if not assistant_reply:
-                assistant_reply = ""
+            assistant_reply = generate_response(system_prompt, prompt)
             if contains_blocked_phrase(assistant_reply):
                 assistant_reply = safe_response(assistant_reply)
-                widgets = []
             else:
                 assistant_reply = append_disclaimer(assistant_reply)
         except GeminiNotConfigured:
@@ -256,19 +279,6 @@ def send_message(
                 "AI is not configured yet. Please set GEMINI_API_KEY to enable chat responses.\n\n"
                 f"{ASSISTANT_DISCLAIMER}"
             )
-        except Exception:
-            # Fallback to non-tool generation
-            try:
-                assistant_reply = generate_response(system_prompt, prompt)
-                if contains_blocked_phrase(assistant_reply):
-                    assistant_reply = safe_response(assistant_reply)
-                else:
-                    assistant_reply = append_disclaimer(assistant_reply)
-            except GeminiNotConfigured:
-                assistant_reply = (
-                    "AI is not configured yet. Please set GEMINI_API_KEY to enable chat responses.\n\n"
-                    f"{ASSISTANT_DISCLAIMER}"
-                )
 
     metadata = {"widgets": widgets} if widgets else {}
 

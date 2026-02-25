@@ -66,7 +66,7 @@ def generate_response(system_prompt: str, user_prompt: str) -> str:
         raise GeminiNotConfigured("GEMINI_API_KEY is not configured")
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
+        model_name="gemini-2.5-flash",
         system_instruction=system_prompt,
     )
     result = model.generate_content(user_prompt)
@@ -78,6 +78,7 @@ def generate_response(system_prompt: str, user_prompt: str) -> str:
 def generate_response_with_tools(
     system_prompt: str,
     user_prompt: str,
+    chat_history: list[dict] | None = None,
     tool_executor: Any = None,
 ) -> tuple[str, list[dict]]:
     """Generate a response using Gemini function calling.
@@ -107,7 +108,15 @@ def generate_response_with_tools(
         tools=[tools],
     )
 
-    chat = model.start_chat()
+    # Build conversation history so Gemini has prior context
+    history_parts = []
+    for msg in (chat_history or []):
+        role = "model" if msg.get("role") == "assistant" else "user"
+        content = msg.get("content", "")
+        if content:
+            history_parts.append({"role": role, "parts": [content]})
+
+    chat = model.start_chat(history=history_parts)
     response = chat.send_message(user_prompt)
 
     widgets: list[dict] = []
