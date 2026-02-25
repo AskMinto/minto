@@ -358,10 +358,14 @@ export default function SearchScreen() {
           <View style={styles.newsSection}>
             <Text style={styles.newsSectionTitle}>Related news</Text>
             {news.slice(0, 5).map((item, index) => (
-              <View key={`news-${index}`} style={styles.newsRow}>
+              <Pressable
+                key={`news-${index}`}
+                style={styles.newsRow}
+                onPress={() => item.link && Linking.openURL(item.link)}
+              >
                 <Text style={styles.newsTitle} numberOfLines={2}>{item.title}</Text>
                 <Text style={styles.newsMeta}>{item.publisher || ''}</Text>
-              </View>
+              </Pressable>
             ))}
           </View>
         )}
