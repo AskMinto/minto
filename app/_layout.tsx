@@ -105,6 +105,7 @@ function RootLayoutNav() {
 
     const inTabsGroup = segments[0] === '(tabs)';
     const inOnboardingGroup = segments[0] === '(onboarding)';
+    const inAppScreen = ['portfolio', 'chat', 'instrument'].includes(segments[0] as string);
     
     // Quick routing based on auth state
     if (!session && (inTabsGroup || inOnboardingGroup)) {
@@ -121,12 +122,12 @@ function RootLayoutNav() {
       return;
     }
 
-    if (onboardingState === 'needsQuiz' && segments[1] !== 'risk-quiz') {
+    if (onboardingState === 'needsQuiz' && segments[1] !== 'risk-quiz' && segments[1] !== 'connect-zerodha') {
       router.replace('/(onboarding)/risk-quiz');
       return;
     }
 
-    if (onboardingState === 'complete' && !inTabsGroup) {
+    if (onboardingState === 'complete' && !inTabsGroup && !inAppScreen) {
       router.replace('/(tabs)/dashboard');
     }
   }, [session, initialized, segments, onboardingState]);
