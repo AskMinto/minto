@@ -1,15 +1,267 @@
-import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TextInput, ScrollView, Pressable, ActivityIndicator } from 'react-native';
-import { Search as SearchIcon, TrendingUp, Building2 } from 'lucide-react-native';
+import { useEffect, useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
+  TextInput,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  Modal,
+  Dimensions,
+} from 'react-native';
+import { Search as SearchIcon, TrendingUp, TrendingDown, Building2, X, ExternalLink } from 'lucide-react-native';
+import Svg, { Path, Line } from 'react-native-svg';
 import { useRouter } from 'expo-router';
 import { apiGet } from '../../lib/api';
 
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const MODAL_CHART_WIDTH = SCREEN_WIDTH - 96;
+const MODAL_CHART_HEIGHT = 120;
+
+/* ── Mini SVG line chart (equity prices) ────────────────────────── */
+function MiniPriceChart({ data }: { data: { date: string; close: number }[] }) {
+  if (!data || data.length < 2) {
+    return <Text style={styles.chartEmpty}>Not enough data</Text>;
+  }
+  const closes = data.map((d) => d.close);
+  const min = Math.min(...closes);
+  const max = Math.max(...closes);
+  const range = max - min || 1;
+  const points = data.map((d, i) => ({
+    x: (i / (data.length - 1)) * MODAL_CHART_WIDTH,
+    y: MODAL_CHART_HEIGHT - ((d.close - min) / range) * (MODAL_CHART_HEIGHT - 16) - 8,
+  }));
+  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const isPositive = closes[closes.length - 1] >= closes[0];
+  const strokeColor = isPositive ? '#a2b082' : '#ff6b6b';
+
+  return (
+    <Svg width={MODAL_CHART_WIDTH} height={MODAL_CHART_HEIGHT}>
+      <Line x1={0} y1={MODAL_CHART_HEIGHT} x2={MODAL_CHART_WIDTH} y2={MODAL_CHART_HEIGHT} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
+      <Path d={pathD} stroke={strokeColor} strokeWidth={2} fill="none" />
+    </Svg>
+  );
+}
+
+/* ── Mini SVG line chart (MF NAV) ───────────────────────────────── */
+function MiniNavChart({ data }: { data: { date: string; nav: number }[] }) {
+  if (!data || data.length < 2) {
+    return <Text style={styles.chartEmpty}>Not enough data</Text>;
+  }
+  const navs = data.map((d) => d.nav);
+  const min = Math.min(...navs);
+  const max = Math.max(...navs);
+  const range = max - min || 1;
+  const points = data.map((d, i) => ({
+    x: (i / (data.length - 1)) * MODAL_CHART_WIDTH,
+    y: MODAL_CHART_HEIGHT - ((d.nav - min) / range) * (MODAL_CHART_HEIGHT - 16) - 8,
+  }));
+  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const isPositive = navs[navs.length - 1] >= navs[0];
+  const strokeColor = isPositive ? '#a2b082' : '#ff6b6b';
+
+  return (
+    <Svg width={MODAL_CHART_WIDTH} height={MODAL_CHART_HEIGHT}>
+      <Line x1={0} y1={MODAL_CHART_HEIGHT} x2={MODAL_CHART_WIDTH} y2={MODAL_CHART_HEIGHT} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
+      <Path d={pathD} stroke={strokeColor} strokeWidth={2} fill="none" />
+    </Svg>
+  );
+}
+
+function formatCurrency(value: number | null | undefined) {
+  if (value == null) return '—';
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    maximumFractionDigits: 2,
+  }).format(value);
+}
+
+/* ── Detail modal ───────────────────────────────────────────────── */
+function InstrumentModal({
+  visible,
+  item,
+  onClose,
+  onViewFull,
+}: {
+  visible: boolean;
+  item: any;
+  onClose: () => void;
+  onViewFull: () => void;
+}) {
+  const [detail, setDetail] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!visible || !item) {
+      setDetail(null);
+      return;
+    }
+    const load = async () => {
+      try {
+        setLoading(true);
+        const isMF = item.type === 'MUTUAL_FUND';
+        const data = isMF
+          ? await apiGet<any>(`/mf/${item.scheme_code}/detail`)
+          : await apiGet<any>(`/instruments/${item.symbol}/detail${item.exchange ? `?exchange=${item.exchange}` : ''}`);
+        setDetail(data);
+      } catch {
+        setDetail(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [visible, item]);
+
+  const isMF = item?.type === 'MUTUAL_FUND';
+  const changeColor = detail?.change != null && detail.change >= 0 ? '#a2b082' : '#ff6b6b';
+  const ChangeIcon = detail?.change != null && detail.change >= 0 ? TrendingUp : TrendingDown;
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={styles.modalSheet} onPress={() => {}}>
+          {/* Handle bar */}
+          <View style={styles.modalHandle} />
+
+          {/* Close button */}
+          <Pressable style={styles.modalClose} onPress={onClose}>
+            <X color="#888" size={20} />
+          </Pressable>
+
+          <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
+            {loading && <ActivityIndicator color="#a2b082" style={{ marginTop: 24 }} />}
+
+            {!loading && detail && !isMF && (
+              <>
+                {/* ── Equity detail ── */}
+                <Text style={styles.modalName}>{detail.name || item.symbol}</Text>
+                <Text style={styles.modalMeta}>{detail.exchange || ''}{detail.sector ? ` · ${detail.sector}` : ''}</Text>
+
+                <View style={styles.modalPriceRow}>
+                  <Text style={styles.modalPrice}>{formatCurrency(detail.price)}</Text>
+                  {detail.change != null && (
+                    <View style={[styles.modalChangeBadge, { backgroundColor: detail.change >= 0 ? 'rgba(162,176,130,0.18)' : 'rgba(255,107,107,0.18)' }]}>
+                      <ChangeIcon color={changeColor} size={12} />
+                      <Text style={[styles.modalChangeText, { color: changeColor }]}>
+                        {detail.change >= 0 ? '+' : ''}{detail.change?.toFixed(2)} ({detail.change_pct?.toFixed(2)}%)
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Chart */}
+                <View style={styles.modalChartCard}>
+                  <Text style={styles.modalChartLabel}>30-day price</Text>
+                  <MiniPriceChart data={detail.price_history || []} />
+                </View>
+
+                {/* Key stats */}
+                <View style={styles.modalStatsRow}>
+                  <View style={styles.modalStatItem}>
+                    <Text style={styles.modalStatLabel}>Day low</Text>
+                    <Text style={styles.modalStatValue}>{formatCurrency(detail.day_low)}</Text>
+                  </View>
+                  <View style={styles.modalStatItem}>
+                    <Text style={styles.modalStatLabel}>Day high</Text>
+                    <Text style={styles.modalStatValue}>{formatCurrency(detail.day_high)}</Text>
+                  </View>
+                  <View style={styles.modalStatItem}>
+                    <Text style={styles.modalStatLabel}>Prev. close</Text>
+                    <Text style={styles.modalStatValue}>{formatCurrency(detail.previous_close)}</Text>
+                  </View>
+                </View>
+
+                {/* News */}
+                {detail.news && detail.news.length > 0 && (
+                  <View style={styles.modalNewsSection}>
+                    <Text style={styles.modalNewsSectionTitle}>Related news</Text>
+                    {detail.news.slice(0, 3).map((n: any, i: number) => (
+                      <View key={`mnews-${i}`} style={styles.modalNewsRow}>
+                        <Text style={styles.modalNewsTitle} numberOfLines={2}>{n.title}</Text>
+                        <Text style={styles.modalNewsMeta}>{n.publisher || ''}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </>
+            )}
+
+            {!loading && detail && isMF && (
+              <>
+                {/* ── MF detail ── */}
+                <Text style={styles.modalName}>{detail.scheme_name || `Scheme ${item.scheme_code}`}</Text>
+                <Text style={styles.modalMeta}>{detail.fund_house || ''}</Text>
+                {detail.scheme_category && (
+                  <View style={styles.modalCategoryBadge}>
+                    <Text style={styles.modalCategoryText}>{detail.scheme_category}</Text>
+                  </View>
+                )}
+
+                <View style={styles.modalPriceRow}>
+                  <View>
+                    <Text style={styles.modalNavLabel}>NAV</Text>
+                    <Text style={styles.modalPrice}>₹{detail.nav?.toFixed(4) ?? '—'}</Text>
+                  </View>
+                  {detail.nav_date && <Text style={styles.modalNavDate}>as of {detail.nav_date}</Text>}
+                </View>
+
+                {/* Chart */}
+                <View style={styles.modalChartCard}>
+                  <Text style={styles.modalChartLabel}>30-day NAV trend</Text>
+                  <MiniNavChart data={detail.nav_history || []} />
+                </View>
+
+                {/* Returns */}
+                {detail.returns && Object.keys(detail.returns).length > 0 && (
+                  <View style={styles.modalReturnsRow}>
+                    {Object.entries(detail.returns).map(([period, value]: [string, any]) => {
+                      const isPos = value >= 0;
+                      return (
+                        <View key={period} style={styles.modalReturnItem}>
+                          <Text style={styles.modalReturnPeriod}>{period.toUpperCase()}</Text>
+                          <Text style={[styles.modalReturnValue, { color: isPos ? '#a2b082' : '#ff6b6b' }]}>
+                            {isPos ? '+' : ''}{value.toFixed(2)}%
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </>
+            )}
+
+            {!loading && !detail && (
+              <Text style={styles.modalErrorText}>Unable to load details.</Text>
+            )}
+          </ScrollView>
+
+          {/* View full details CTA */}
+          {detail && (
+            <Pressable style={styles.modalCta} onPress={onViewFull}>
+              <ExternalLink color="#0a0d0b" size={16} />
+              <Text style={styles.modalCtaText}>View full details</Text>
+            </Pressable>
+          )}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+/* ── Search screen ──────────────────────────────────────────────── */
 export default function SearchScreen() {
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [news, setNews] = useState<any[]>([]);
   const [searching, setSearching] = useState(false);
+
+  const [modalVisible, setModalVisible] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<any>(null);
 
   useEffect(() => {
     if (!query.trim()) {
@@ -34,13 +286,26 @@ export default function SearchScreen() {
     return () => clearTimeout(timeout);
   }, [query]);
 
-  const handlePress = (item: any) => {
-    if (item.type === 'MUTUAL_FUND' && item.scheme_code) {
-      router.push(`/instrument/mf/${item.scheme_code}`);
-    } else if (item.symbol) {
-      router.push(`/instrument/${item.symbol}?exchange=${item.exchange || ''}`);
+  const handlePress = useCallback((item: any) => {
+    setSelectedItem(item);
+    setModalVisible(true);
+  }, []);
+
+  const handleCloseModal = useCallback(() => {
+    setModalVisible(false);
+    setSelectedItem(null);
+  }, []);
+
+  const handleViewFull = useCallback(() => {
+    setModalVisible(false);
+    if (!selectedItem) return;
+    if (selectedItem.type === 'MUTUAL_FUND' && selectedItem.scheme_code) {
+      router.push(`/instrument/mf/${selectedItem.scheme_code}`);
+    } else if (selectedItem.symbol) {
+      router.push(`/instrument/${selectedItem.symbol}?exchange=${selectedItem.exchange || ''}`);
     }
-  };
+    setSelectedItem(null);
+  }, [selectedItem, router]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -110,6 +375,13 @@ export default function SearchScreen() {
           </View>
         )}
       </ScrollView>
+
+      <InstrumentModal
+        visible={modalVisible}
+        item={selectedItem}
+        onClose={handleCloseModal}
+        onViewFull={handleViewFull}
+      />
     </SafeAreaView>
   );
 }
@@ -240,5 +512,212 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 11,
     marginTop: 4,
+  },
+
+  /* ── Modal styles ─────────────────────────────────────────────── */
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: '#1C211E',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '85%',
+    paddingBottom: 32,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignSelf: 'center',
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  modalClose: {
+    position: 'absolute',
+    top: 14,
+    right: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  modalScroll: {
+    flexGrow: 0,
+  },
+  modalScrollContent: {
+    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  modalName: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+    marginTop: 4,
+    paddingRight: 36,
+  },
+  modalMeta: {
+    color: '#888',
+    fontSize: 12,
+    marginTop: 4,
+  },
+  modalPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 14,
+    marginBottom: 16,
+  },
+  modalPrice: {
+    color: '#fff',
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  modalChangeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  modalChangeText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  modalChartCard: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 14,
+    alignItems: 'center',
+  },
+  modalChartLabel: {
+    color: '#888',
+    fontSize: 11,
+    alignSelf: 'flex-start',
+    marginBottom: 10,
+  },
+  chartEmpty: {
+    color: '#888',
+    fontSize: 11,
+    paddingVertical: 16,
+  },
+  modalStatsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  modalStatItem: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    padding: 10,
+    alignItems: 'center',
+  },
+  modalStatLabel: {
+    color: '#888',
+    fontSize: 10,
+    marginBottom: 4,
+  },
+  modalStatValue: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  modalNewsSection: {
+    marginTop: 2,
+  },
+  modalNewsSectionTitle: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  modalNewsRow: {
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 6,
+  },
+  modalNewsTitle: {
+    color: '#fff',
+    fontSize: 12,
+  },
+  modalNewsMeta: {
+    color: '#888',
+    fontSize: 10,
+    marginTop: 3,
+  },
+  modalCategoryBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(209,176,124,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  modalCategoryText: {
+    color: '#d1b07c',
+    fontSize: 11,
+    fontWeight: '600',
+  },
+  modalNavLabel: {
+    color: '#a2b082',
+    fontSize: 11,
+    marginBottom: 4,
+  },
+  modalNavDate: {
+    color: '#888',
+    fontSize: 10,
+    alignSelf: 'flex-end',
+  },
+  modalReturnsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 14,
+  },
+  modalReturnItem: {
+    alignItems: 'center',
+  },
+  modalReturnPeriod: {
+    color: '#888',
+    fontSize: 10,
+    marginBottom: 4,
+  },
+  modalReturnValue: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  modalErrorText: {
+    color: '#888',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 32,
+  },
+  modalCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#a2b082',
+    borderRadius: 24,
+    paddingVertical: 14,
+    marginHorizontal: 24,
+  },
+  modalCtaText: {
+    color: '#0a0d0b',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
