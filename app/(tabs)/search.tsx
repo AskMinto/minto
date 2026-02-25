@@ -10,8 +10,9 @@ import {
   ActivityIndicator,
   Modal,
   Dimensions,
+  Linking,
 } from 'react-native';
-import { Search as SearchIcon, TrendingUp, TrendingDown, Building2, X, ExternalLink } from 'lucide-react-native';
+import { Search as SearchIcon, TrendingUp, TrendingDown, Building2, X, ExternalLink, Newspaper } from 'lucide-react-native';
 import Svg, { Path, Line } from 'react-native-svg';
 import { useRouter } from 'expo-router';
 import { apiGet } from '../../lib/api';
@@ -83,11 +84,13 @@ function formatCurrency(value: number | null | undefined) {
 function InstrumentModal({
   visible,
   item,
+  searchNews,
   onClose,
   onViewFull,
 }: {
   visible: boolean;
   item: any;
+  searchNews: any[];
   onClose: () => void;
   onViewFull: () => void;
 }) {
@@ -179,11 +182,20 @@ function InstrumentModal({
                 {detail.news && detail.news.length > 0 && (
                   <View style={styles.modalNewsSection}>
                     <Text style={styles.modalNewsSectionTitle}>Related news</Text>
-                    {detail.news.slice(0, 3).map((n: any, i: number) => (
-                      <View key={`mnews-${i}`} style={styles.modalNewsRow}>
-                        <Text style={styles.modalNewsTitle} numberOfLines={2}>{n.title}</Text>
-                        <Text style={styles.modalNewsMeta}>{n.publisher || ''}</Text>
-                      </View>
+                    {detail.news.slice(0, 5).map((n: any, i: number) => (
+                      <Pressable
+                        key={`mnews-${i}`}
+                        style={styles.modalNewsRow}
+                        onPress={() => n.link && Linking.openURL(n.link)}
+                      >
+                        <View style={styles.modalNewsContent}>
+                          <Newspaper color="#888" size={14} style={{ marginTop: 2 }} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.modalNewsTitle} numberOfLines={2}>{n.title}</Text>
+                            <Text style={styles.modalNewsMeta}>{n.publisher || ''}</Text>
+                          </View>
+                        </View>
+                      </Pressable>
                     ))}
                   </View>
                 )}
@@ -229,6 +241,28 @@ function InstrumentModal({
                         </View>
                       );
                     })}
+                  </View>
+                )}
+
+                {/* News (from search results since MF endpoint has none) */}
+                {searchNews.length > 0 && (
+                  <View style={styles.modalNewsSection}>
+                    <Text style={styles.modalNewsSectionTitle}>Related news</Text>
+                    {searchNews.slice(0, 5).map((n: any, i: number) => (
+                      <Pressable
+                        key={`mnews-${i}`}
+                        style={styles.modalNewsRow}
+                        onPress={() => n.link && Linking.openURL(n.link)}
+                      >
+                        <View style={styles.modalNewsContent}>
+                          <Newspaper color="#888" size={14} style={{ marginTop: 2 }} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.modalNewsTitle} numberOfLines={2}>{n.title}</Text>
+                            <Text style={styles.modalNewsMeta}>{n.publisher || ''}</Text>
+                          </View>
+                        </View>
+                      </Pressable>
+                    ))}
                   </View>
                 )}
               </>
@@ -297,14 +331,18 @@ export default function SearchScreen() {
   }, []);
 
   const handleViewFull = useCallback(() => {
+    const item = selectedItem;
     setModalVisible(false);
-    if (!selectedItem) return;
-    if (selectedItem.type === 'MUTUAL_FUND' && selectedItem.scheme_code) {
-      router.push(`/instrument/mf/${selectedItem.scheme_code}`);
-    } else if (selectedItem.symbol) {
-      router.push(`/instrument/${selectedItem.symbol}?exchange=${selectedItem.exchange || ''}`);
-    }
     setSelectedItem(null);
+    if (!item) return;
+    // Delay navigation so the modal fully dismisses first
+    setTimeout(() => {
+      if (item.type === 'MUTUAL_FUND' && item.scheme_code) {
+        router.push(`/instrument/mf/${item.scheme_code}`);
+      } else if (item.symbol) {
+        router.push(`/instrument/${item.symbol}?exchange=${item.exchange || ''}`);
+      }
+    }, 300);
   }, [selectedItem, router]);
 
   return (
@@ -379,6 +417,7 @@ export default function SearchScreen() {
       <InstrumentModal
         visible={modalVisible}
         item={selectedItem}
+        searchNews={news}
         onClose={handleCloseModal}
         onViewFull={handleViewFull}
       />
@@ -646,6 +685,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 10,
     marginBottom: 6,
+  },
+  modalNewsContent: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
   },
   modalNewsTitle: {
     color: '#fff',
