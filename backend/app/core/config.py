@@ -12,6 +12,7 @@ def _get_env(name: str, default: str | None = None) -> str | None:
 SUPABASE_URL = _get_env("SUPABASE_URL") or _get_env("EXPO_PUBLIC_SUPABASE_URL")
 SUPABASE_ANON_KEY = _get_env("SUPABASE_ANON_KEY") or _get_env("EXPO_PUBLIC_SUPABASE_ANON_KEY")
 SUPABASE_JWKS_URL = _get_env("SUPABASE_JWKS_URL")
+SUPABASE_JWT_SECRET = _get_env("SUPABASE_JWT_SECRET")
 
 GEMINI_API_KEY = _get_env("GEMINI_API_KEY")
 
