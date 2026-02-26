@@ -94,19 +94,12 @@ def connection_status(user: UserContext = Depends(get_user_context)):
         .select("id, created_at")
         .eq("user_id", user.user_id)
         .eq("source", "zerodha")
-        .limit(1)
         .execute()
     )
-    connected = bool(result.data and len(result.data) > 0)
-    count_result = (
-        supabase.table("holdings")
-        .select("id", count="exact")
-        .eq("user_id", user.user_id)
-        .eq("source", "zerodha")
-        .execute()
-    )
+    rows = result.data or []
+    connected = len(rows) > 0
     return {
         "connected": connected,
-        "holdings_count": count_result.count or 0,
-        "imported_at": result.data[0]["created_at"] if connected else None,
+        "holdings_count": len(rows),
+        "imported_at": rows[0]["created_at"] if connected else None,
     }
