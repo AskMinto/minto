@@ -16,8 +16,10 @@ export default function ConnectZerodhaScreen() {
       setLoading(true);
       setError(null);
 
-      const { url } = await apiGet<{ url: string }>('/zerodha/login-url');
       const redirectUrl = Linking.createURL('zerodha-callback');
+      const { url } = await apiGet<{ url: string }>(
+        `/zerodha/login-url?app_redirect=${encodeURIComponent(redirectUrl)}`
+      );
 
       const result = await WebBrowser.openAuthSessionAsync(url, redirectUrl);
 

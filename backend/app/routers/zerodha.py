@@ -1,20 +1,18 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 from ..core.auth import UserContext, get_user_context
-from ..core.config import KITE_REDIRECT_URL
 from ..db.supabase import get_supabase_client
-from ..services.kite_service import (
-    get_login_url,
-    exchange_token,
-    fetch_holdings,
-    map_kite_holdings,
-)
+from ..services.kite_service import get_login_url, exchange_token, fetch_holdings, map_kite_holdings
 
 router = APIRouter(prefix="/zerodha", tags=["zerodha"])
+
+# Temporary store: maps a user-generated nonce to their app redirect URL.
+# In production, use Redis or a database. Fine for single-server dev.
+_pending_redirects: dict[str, str] = {}
 
 
 class CallbackPayload(BaseModel):
@@ -22,21 +20,44 @@ class CallbackPayload(BaseModel):
 
 
 @router.get("/redirect")
-def redirect_to_app(request_token: str | None = None, status_param: str | None = None):
+def redirect_to_app(request_token: str | None = None, **_kwargs):
     """
     Kite Connect redirects here after login.
-    Forwards the request_token to the mobile app via deep link.
+    Returns an HTML page that forwards the request_token to the mobile app
+    via JavaScript deep link (browsers block HTTP redirects to custom schemes).
     """
-    if not request_token:
-        deep_link = f"{KITE_REDIRECT_URL}?error=no_token"
+    # Pick the most recent pending redirect URL, or fall back to minto://
+    app_url = "minto://zerodha-callback"
+    if _pending_redirects:
+        # Pop the most recently stored redirect URL
+        last_key = list(_pending_redirects.keys())[-1]
+        app_url = _pending_redirects.pop(last_key)
+
+    if request_token:
+        separator = "&" if "?" in app_url else "?"
+        deep_link = f"{app_url}{separator}request_token={request_token}"
     else:
-        deep_link = f"{KITE_REDIRECT_URL}?request_token={request_token}"
-    return RedirectResponse(url=deep_link)
+        separator = "&" if "?" in app_url else "?"
+        deep_link = f"{app_url}{separator}error=no_token"
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Redirecting…</title></head>
+<body style="background:#1C211E;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+<p>Redirecting to Minto…</p>
+<script>window.location.replace("{deep_link}");</script>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
 
 
 @router.get("/login-url")
-def login_url(user: UserContext = Depends(get_user_context)):
+def login_url(app_redirect: str | None = None, user: UserContext = Depends(get_user_context)):
     _ = user
+    if app_redirect:
+        import uuid
+        nonce = str(uuid.uuid4())
+        _pending_redirects[nonce] = app_redirect
     return {"url": get_login_url()}
 
 
