@@ -41,7 +41,7 @@ yarn-error.*
 # generated native folders
 /ios
 /android
-
+.envz
 # editor/tooling
 .vscode/
 .cosine/
