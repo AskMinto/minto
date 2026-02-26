@@ -20,7 +20,12 @@ class CallbackPayload(BaseModel):
 
 
 @router.get("/redirect")
-def redirect_to_app(request_token: str | None = None, **_kwargs):
+def redirect_to_app(
+    request_token: str | None = None,
+    status: str | None = None,
+    action: str | None = None,
+    type: str | None = None,
+):
     """
     Kite Connect redirects here after login.
     Returns an HTML page that forwards the request_token to the mobile app
