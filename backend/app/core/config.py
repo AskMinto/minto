@@ -23,6 +23,10 @@ MEM0_AUTH_HEADER = _get_env("MEM0_AUTH_HEADER", "Authorization")
 MEM0_AUTH_SCHEME = _get_env("MEM0_AUTH_SCHEME", "Bearer")
 MEM0_PROJECT_HEADER = _get_env("MEM0_PROJECT_HEADER", "x-project-key")
 
+KITE_API_KEY = _get_env("KITE_API_KEY")
+KITE_API_SECRET = _get_env("KITE_API_SECRET")
+KITE_REDIRECT_URL = _get_env("KITE_REDIRECT_URL")
+
 MFAPI_BASE_URL = _get_env("MFAPI_BASE_URL", "https://api.mfapi.in")
 
 YFINANCE_MAX_RESULTS = int(_get_env("YFINANCE_MAX_RESULTS", "12"))

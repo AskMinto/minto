@@ -69,7 +69,7 @@ export default function RiskQuizScreen() {
       if (upsertError) {
         throw new Error(upsertError.message);
       }
-      await recheckOnboarding();
+      router.replace('/(onboarding)/connect-zerodha');
     } catch (err: any) {
       setError(err.message || 'Unable to save risk profile');
     } finally {

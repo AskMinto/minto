@@ -176,9 +176,9 @@ export default function DashboardScreen() {
             <Plus color="#0a0d0b" size={16} />
             <Text style={styles.actionText}>Add Holding</Text>
           </Pressable>
-          <Pressable style={styles.actionButton} onPress={() => router.push('/portfolio/cas-upload')}>
+          <Pressable style={styles.actionButton} onPress={() => router.push('/portfolio/connections')}>
             <Upload color="#0a0d0b" size={16} />
-            <Text style={styles.actionText}>Upload CAS</Text>
+            <Text style={styles.actionText}>Import from Zerodha</Text>
           </Pressable>
         </View>
 
