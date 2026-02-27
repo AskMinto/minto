@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Linking } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Linking, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Send, MessageCircle, TrendingUp, Newspaper } from 'lucide-react-native';
+import { Send, MessageCircle, TrendingUp, Newspaper, Plus, X, ExternalLink } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { apiGet, apiStream, SSEEvent } from '../../lib/api';
 import { useFocusEffect } from '@react-navigation/native';
 
-function TickerCard({ data, onPress }: { data: any; onPress?: () => void }) {
-  const isStock = !!data.symbol;
-  const label = isStock ? data.symbol : data.scheme_name || `Scheme ${data.scheme_code}`;
-  const value = isStock ? `₹${data.price?.toFixed(2) ?? '—'}` : `NAV ₹${data.nav?.toFixed(4) ?? '—'}`;
-  const sub = isStock
-    ? data.previous_close ? `Prev: ₹${data.previous_close.toFixed(2)}` : ''
-    : data.fund_house || '';
+function PriceSummaryWidget({ data, onPress }: { data: any; onPress: () => void }) {
+  const items = data.items || [];
+  if (!items.length) return null;
+  const first = items[0];
+  const isEquity = first.type === 'equity';
+  const label = isEquity ? first.symbol : first.scheme_name || 'Mutual Fund';
+  const value = isEquity ? `₹${first.price?.toFixed(2)}` : `NAV ₹${first.nav?.toFixed(4)}`;
+  const extra = items.length - 1;
 
   return (
     <Pressable style={styles.widgetCard} onPress={onPress}>
@@ -21,34 +22,107 @@ function TickerCard({ data, onPress }: { data: any; onPress?: () => void }) {
       </View>
       <View style={styles.widgetInfo}>
         <Text style={styles.widgetLabel} numberOfLines={1}>{label}</Text>
-        <Text style={styles.widgetSub} numberOfLines={1}>{sub}</Text>
+        <Text style={styles.widgetSub} numberOfLines={1}>{value}</Text>
       </View>
-      <Text style={styles.widgetValue}>{value}</Text>
+      {extra > 0 && (
+        <View style={styles.badgeCircle}>
+          <Plus color="#fff" size={12} />
+          <Text style={styles.badgeText}>{extra}</Text>
+        </View>
+      )}
     </Pressable>
   );
 }
 
-function NewsCard({ data }: { data: any }) {
+function NewsSummaryWidget({ data, onPress }: { data: any; onPress: () => void }) {
   const items = data.items || [];
   if (!items.length) return null;
+  const first = items[0];
+  const extra = items.length - 1;
 
   return (
-    <View style={styles.newsWidget}>
-      <View style={styles.newsWidgetHeader}>
-        <Newspaper color="#d1b07c" size={14} />
-        <Text style={styles.newsWidgetTitle}>News: {data.query || ''}</Text>
+    <Pressable style={styles.widgetCard} onPress={onPress}>
+      <View style={[styles.widgetIconBox, { backgroundColor: 'rgba(209,176,124,0.15)' }]}>
+        <Newspaper color="#d1b07c" size={16} />
       </View>
-      {items.slice(0, 3).map((item: any, i: number) => (
-        <Pressable
-          key={`news-${i}`}
-          style={styles.newsWidgetRow}
-          onPress={() => item.link && Linking.openURL(item.link)}
-        >
-          <Text style={styles.newsWidgetItemTitle} numberOfLines={2}>{item.title}</Text>
-          <Text style={styles.newsWidgetMeta}>{item.publisher || ''}</Text>
+      <View style={styles.widgetInfo}>
+        <Text style={styles.widgetLabel} numberOfLines={1}>{first.title}</Text>
+        <Text style={styles.widgetSub} numberOfLines={1}>{first.publisher || 'News'}</Text>
+      </View>
+      {extra > 0 && (
+        <View style={[styles.badgeCircle, { backgroundColor: 'rgba(209,176,124,0.25)' }]}>
+          <Plus color="#d1b07c" size={12} />
+          <Text style={[styles.badgeText, { color: '#d1b07c' }]}>{extra}</Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+function PriceModal({ visible, items, onClose }: { visible: boolean; items: any[]; onClose: () => void }) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={styles.modalSheet} onPress={() => {}}>
+          <View style={styles.modalHandle} />
+          <Pressable style={styles.modalCloseBtn} onPress={onClose}>
+            <X color="#888" size={20} />
+          </Pressable>
+          <Text style={styles.modalTitle}>Price Lookups</Text>
+          <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
+            {items.map((item: any, i: number) => {
+              const isEquity = item.type === 'equity';
+              const label = isEquity ? item.symbol : item.scheme_name || 'Mutual Fund';
+              const value = isEquity ? `₹${item.price?.toFixed(2)}` : `NAV ₹${item.nav?.toFixed(4)}`;
+              const sub = isEquity ? '' : item.fund_house || '';
+              return (
+                <View key={`price-${i}`} style={styles.modalRow}>
+                  <View style={styles.widgetIconBox}>
+                    <TrendingUp color="#a2b082" size={16} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modalRowLabel}>{label}</Text>
+                    {sub ? <Text style={styles.modalRowSub}>{sub}</Text> : null}
+                  </View>
+                  <Text style={styles.modalRowValue}>{value}</Text>
+                </View>
+              );
+            })}
+          </ScrollView>
         </Pressable>
-      ))}
-    </View>
+      </Pressable>
+    </Modal>
+  );
+}
+
+function NewsModal({ visible, items, onClose }: { visible: boolean; items: any[]; onClose: () => void }) {
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <Pressable style={styles.modalOverlay} onPress={onClose}>
+        <Pressable style={styles.modalSheet} onPress={() => {}}>
+          <View style={styles.modalHandle} />
+          <Pressable style={styles.modalCloseBtn} onPress={onClose}>
+            <X color="#888" size={20} />
+          </Pressable>
+          <Text style={styles.modalTitle}>Related News</Text>
+          <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
+            {items.map((item: any, i: number) => (
+              <Pressable
+                key={`news-${i}`}
+                style={styles.modalNewsRow}
+                onPress={() => item.link && Linking.openURL(item.link)}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalNewsTitle}>{item.title}</Text>
+                  <Text style={styles.modalNewsMeta}>{item.publisher || ''}</Text>
+                </View>
+                {item.link ? <ExternalLink color="#555" size={14} /> : null}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -59,6 +133,8 @@ export default function ChatScreen() {
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [priceModalItems, setPriceModalItems] = useState<any[]>([]);
+  const [newsModalItems, setNewsModalItems] = useState<any[]>([]);
 
   const hasLoadedOnce = useRef(false);
 
@@ -198,23 +274,23 @@ export default function ChatScreen() {
                 {message.role === 'assistant' && widgets.length > 0 && (
                   <View style={styles.widgetsContainer}>
                     {widgets.map((widget: any, wi: number) => {
-                      if (widget.type === 'ticker_card') {
+                      if (widget.type === 'price_summary') {
                         return (
-                          <TickerCard
+                          <PriceSummaryWidget
                             key={`widget-${wi}`}
                             data={widget.data}
-                            onPress={() => {
-                              if (widget.data.scheme_code) {
-                                router.push(`/instrument/mf/${widget.data.scheme_code}`);
-                              } else if (widget.data.symbol) {
-                                router.push(`/instrument/${widget.data.symbol}`);
-                              }
-                            }}
+                            onPress={() => setPriceModalItems(widget.data.items || [])}
                           />
                         );
                       }
-                      if (widget.type === 'news_card') {
-                        return <NewsCard key={`widget-${wi}`} data={widget.data} />;
+                      if (widget.type === 'news_summary') {
+                        return (
+                          <NewsSummaryWidget
+                            key={`widget-${wi}`}
+                            data={widget.data}
+                            onPress={() => setNewsModalItems(widget.data.items || [])}
+                          />
+                        );
                       }
                       return null;
                     })}
@@ -243,6 +319,17 @@ export default function ChatScreen() {
           </Pressable>
         </View>
       </KeyboardAvoidingView>
+
+      <PriceModal
+        visible={priceModalItems.length > 0}
+        items={priceModalItems}
+        onClose={() => setPriceModalItems([])}
+      />
+      <NewsModal
+        visible={newsModalItems.length > 0}
+        items={newsModalItems}
+        onClose={() => setNewsModalItems([])}
+      />
     </SafeAreaView>
   );
 }
@@ -409,32 +496,107 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
-  newsWidget: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 16,
-    padding: 12,
-  },
-  newsWidgetHeader: {
+  badgeCircle: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    backgroundColor: 'rgba(162,176,130,0.25)',
+    borderRadius: 12,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    gap: 2,
+  },
+  badgeText: {
+    color: '#a2b082',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: '#1C211E',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '70%',
+    paddingBottom: 32,
+  },
+  modalHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignSelf: 'center',
+    marginTop: 10,
     marginBottom: 8,
   },
-  newsWidgetTitle: {
-    color: '#d1b07c',
-    fontSize: 12,
+  modalCloseBtn: {
+    position: 'absolute',
+    top: 14,
+    right: 18,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  modalTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+    paddingHorizontal: 24,
+    marginTop: 4,
+    marginBottom: 16,
+  },
+  modalScroll: {
+    flexGrow: 0,
+  },
+  modalScrollContent: {
+    paddingHorizontal: 24,
+    paddingBottom: 16,
+  },
+  modalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  modalRowLabel: {
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '600',
   },
-  newsWidgetRow: {
-    marginBottom: 8,
-  },
-  newsWidgetItemTitle: {
-    color: '#fff',
-    fontSize: 12,
-  },
-  newsWidgetMeta: {
+  modalRowSub: {
     color: '#888',
-    fontSize: 10,
+    fontSize: 11,
     marginTop: 2,
+  },
+  modalRowValue: {
+    color: '#a2b082',
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  modalNewsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  modalNewsTitle: {
+    color: '#fff',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  modalNewsMeta: {
+    color: '#888',
+    fontSize: 11,
+    marginTop: 4,
   },
 });

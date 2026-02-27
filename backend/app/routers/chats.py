@@ -116,12 +116,17 @@ def _build_user_prompt(message: str, memory: str, portfolio: dict) -> str:
         f"P&L: {totals.get('pnl_pct', 0):.1f}%"
     )
 
-    # Only show holding names — NO prices, values, or quantities
-    # to prevent the model from deriving/hallucinating per-share prices
+    # Show holding names with type labels so the agent knows which tool to use
+    # NO prices/values to prevent hallucination
     holdings_lines = []
     for h in top_holdings[:10]:
-        name = h.get("symbol") or h.get("scheme_name") or h.get("isin") or "Unknown"
-        holdings_lines.append(f"  {name}")
+        scheme_code = h.get("scheme_code")
+        if scheme_code:
+            name = h.get("scheme_name") or f"MF:{scheme_code}"
+            holdings_lines.append(f"  [MF] {name} (scheme_code={scheme_code})")
+        else:
+            name = h.get("symbol") or h.get("isin") or "Unknown"
+            holdings_lines.append(f"  [EQ] {name}")
     holdings_block = "\n".join(holdings_lines) if holdings_lines else "  No holdings"
 
     memory_block = f"Previous conversation context:\n{memory}\n\n" if memory else ""
@@ -129,8 +134,9 @@ def _build_user_prompt(message: str, memory: str, portfolio: dict) -> str:
     return (
         f"{memory_block}"
         f"Portfolio summary: {portfolio_summary}\n"
-        f"Holdings: {holdings_block}\n"
-        f"(Use get_current_stock_price tool for any price data)\n\n"
+        f"Holdings:\n{holdings_block}\n"
+        f"(For [EQ] holdings: use get_current_stock_price with .NS suffix. "
+        f"For [MF] holdings: use _get_mf_nav with the scheme_code.)\n\n"
         f"User question: {message}"
     )
 

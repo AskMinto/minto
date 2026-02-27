@@ -21,10 +21,9 @@ AGENT_INSTRUCTIONS = [
     "You make finance fun and easy to understand. Casual tone, relatable analogies.",
     "",
     "MANDATORY TOOL USAGE:",
-    "- You have NO knowledge of current stock prices. Your training data prices are OUTDATED.",
-    "- Before stating ANY stock price, you MUST call get_current_stock_price first.",
-    "- Before stating ANY mutual fund NAV, you MUST call _get_mf_nav first.",
-    "- For Indian stocks, ALWAYS use the .NS suffix (e.g., HDFCBANK.NS, SBIN.NS, TCS.NS).",
+    "- You have NO knowledge of current stock prices or NAVs. Your training data is OUTDATED.",
+    "- For [EQ] equity holdings: call get_current_stock_price with .NS suffix (e.g. SBIN.NS).",
+    "- For [MF] mutual fund holdings: call _get_mf_nav with the scheme_code from the portfolio.",
     "- Report the EXACT number the tool returns. Never round, adjust, or estimate.",
     "- If a tool errors, say 'data unavailable right now'. NEVER make up a number.",
     "- NEVER ask the user 'would you like me to look that up?' — just look it up.",
@@ -149,7 +148,7 @@ def _build_agent(system_prompt: str, chat_history: list[dict] | None = None) -> 
     )
 
     agent = Agent(
-        model=Gemini(id="gemini-2.0-flash", temperature=0),
+        model=Gemini(id="gemini-3-flash-preview", temperature=0.3),
         tools=[yf_tools, newspaper_tools, ddg_tools, _get_mf_nav, _search_instrument, _get_market_overview],
         description=system_prompt,
         instructions=AGENT_INSTRUCTIONS,
@@ -159,12 +158,17 @@ def _build_agent(system_prompt: str, chat_history: list[dict] | None = None) -> 
     )
     return agent
 
-
 def _extract_widgets(run_output: RunOutput) -> list[dict]:
-    """Extract widget data from tool execution results."""
-    widgets: list[dict] = []
+    """Extract widget data from tool execution results.
+
+    Aggregates all price lookups into a single price_summary widget
+    and all news into a single news_summary widget (max 2 widgets total).
+    """
+    price_items: list[dict] = []
+    news_items: list[dict] = []
+
     if not run_output.tools:
-        return widgets
+        return []
 
     for tool_exec in run_output.tools:
         name = tool_exec.tool_name or ""
@@ -174,9 +178,9 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
         try:
             result = json.loads(result_str) if result_str else None
         except (json.JSONDecodeError, TypeError):
-            result = result_str  # Keep raw string for tools that return plain text
+            result = result_str
 
-        # get_current_stock_price returns a plain decimal string like "1201.7000"
+        # Stock price → add to price_items
         if name == "get_current_stock_price":
             price = None
             symbol = args.get("symbol", "")
@@ -188,40 +192,32 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
                 except ValueError:
                     pass
             if price:
-                # Strip .NS/.BO suffix for display
                 display_symbol = symbol
                 for suffix in (".NS", ".BO", ".ns", ".bo"):
                     if display_symbol.endswith(suffix):
                         display_symbol = display_symbol[:-len(suffix)]
                         break
-                widgets.append({
-                    "type": "ticker_card",
-                    "data": {
-                        "symbol": display_symbol,
-                        "price": price,
-                        "previous_close": None,
-                    },
+                price_items.append({
+                    "symbol": display_symbol,
+                    "price": price,
+                    "type": "equity",
                 })
 
+        # MF NAV → add to price_items
         elif name == "_get_mf_nav" and isinstance(result, dict) and result.get("nav"):
-            widgets.append({
-                "type": "ticker_card",
-                "data": {
-                    "scheme_name": result.get("scheme_name"),
-                    "scheme_code": result.get("scheme_code") or args.get("scheme_code"),
-                    "nav": result.get("nav"),
-                    "fund_house": result.get("fund_house"),
-                },
+            price_items.append({
+                "scheme_name": result.get("scheme_name"),
+                "scheme_code": result.get("scheme_code") or args.get("scheme_code"),
+                "nav": result.get("nav"),
+                "fund_house": result.get("fund_house"),
+                "type": "mf",
             })
 
-        # get_company_news returns JSON array with nested content objects:
-        # [{"id": "...", "content": {"title": "...", ...}, ...}, ...]
+        # Company news → add to news_items
         elif name == "get_company_news" and isinstance(result, list):
-            news_items = []
             for item in result[:5]:
                 if not isinstance(item, dict):
                     continue
-                # News data can be nested in "content" sub-object
                 content_obj = item.get("content", item)
                 title = content_obj.get("title", "")
                 link = (
@@ -231,32 +227,37 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
                     or item.get("link", "")
                     or item.get("url", "")
                 )
-                publisher = content_obj.get("provider", {}).get("displayName", "") if isinstance(content_obj.get("provider"), dict) else content_obj.get("publisher", "")
+                publisher = (
+                    content_obj.get("provider", {}).get("displayName", "")
+                    if isinstance(content_obj.get("provider"), dict)
+                    else content_obj.get("publisher", "")
+                )
                 if title:
-                    news_items.append({
-                        "title": title,
-                        "link": link,
-                        "publisher": publisher,
-                    })
-            if news_items:
-                widgets.append({
-                    "type": "news_card",
-                    "data": {
-                        "query": args.get("symbol", ""),
-                        "items": news_items,
-                    },
-                })
+                    news_items.append({"title": title, "link": link, "publisher": publisher})
 
-    # Deduplicate widgets by type+key
-    seen = set()
-    unique: list[dict] = []
-    for w in widgets:
-        data = w.get("data", {})
-        key = (w["type"], data.get("symbol", ""), data.get("scheme_code", ""), data.get("query", ""))
-        if key not in seen:
-            seen.add(key)
-            unique.append(w)
-    return unique
+    # Deduplicate price items by symbol/scheme_code
+    seen_prices: set[str] = set()
+    unique_prices: list[dict] = []
+    for p in price_items:
+        key = p.get("symbol", "") or str(p.get("scheme_code", ""))
+        if key and key not in seen_prices:
+            seen_prices.add(key)
+            unique_prices.append(p)
+
+    # Deduplicate news by title
+    seen_titles: set[str] = set()
+    unique_news: list[dict] = []
+    for n in news_items:
+        if n["title"] not in seen_titles:
+            seen_titles.add(n["title"])
+            unique_news.append(n)
+
+    widgets: list[dict] = []
+    if unique_prices:
+        widgets.append({"type": "price_summary", "data": {"items": unique_prices}})
+    if unique_news:
+        widgets.append({"type": "news_summary", "data": {"items": unique_news}})
+    return widgets
 
 
 def run_research_agent(
