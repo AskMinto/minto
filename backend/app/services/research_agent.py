@@ -99,7 +99,7 @@ def _build_agent(system_prompt: str, chat_history: list[dict] | None = None) -> 
     )
 
     agent = Agent(
-        model=Gemini(id="gemini-2.0-flash", temperature=0),
+        model=Gemini(id="gemini-3-flash-preview", temperature=0.3),
         tools=[yf_tools, newspaper_tools, _get_mf_nav, _search_instrument],
         description=system_prompt,
         instructions=AGENT_INSTRUCTIONS,
@@ -274,7 +274,7 @@ def run_research_agent_stream(
 
     stream = agent.run(user_prompt, stream=True, stream_events=True)
     full_content = ""
-    all_tool_executions: list[Any] = []
+    all_widgets: list[dict] = []
 
     for chunk in stream:
         if chunk.event == RunEvent.run_content:
@@ -290,16 +290,19 @@ def run_research_agent_stream(
             yield {"type": "tool_started", "tool_name": tool_name}
 
         elif chunk.event == RunEvent.tool_call_completed:
-            if hasattr(chunk, "tool") and chunk.tool:
-                all_tool_executions.append(chunk.tool)
             tool_name = ""
+            tool_widgets: list[dict] = []
             if hasattr(chunk, "tool") and chunk.tool:
                 tool_name = chunk.tool.tool_name or ""
-            yield {"type": "tool_completed", "tool_name": tool_name}
+                # Extract widget immediately from this tool's result
+                mock = RunOutput()
+                mock.tools = [chunk.tool]
+                tool_widgets = _extract_widgets(mock)
+                all_widgets.extend(tool_widgets)
+            yield {
+                "type": "tool_completed",
+                "tool_name": tool_name,
+                "widgets": tool_widgets,
+            }
 
-    # Build a mock RunOutput to extract widgets
-    mock_output = RunOutput()
-    mock_output.tools = all_tool_executions if all_tool_executions else None
-    widgets = _extract_widgets(mock_output)
-
-    yield {"type": "done", "content": full_content, "widgets": widgets}
+    yield {"type": "done", "content": full_content, "widgets": all_widgets}

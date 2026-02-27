@@ -158,10 +158,10 @@ def _load_chat_context(supabase, user, chat_id: str):
 
 
 def _apply_guardrails(reply: str, widgets: list[dict]) -> tuple[str, list[dict]]:
-    """Apply guardrail checks and disclaimer to a reply."""
+    """Apply guardrail checks to a reply. No per-message disclaimer — the chat UI has a banner."""
     if contains_blocked_phrase(reply):
         return safe_response(reply), []
-    return append_disclaimer(reply), widgets
+    return reply, widgets
 
 
 def _save_assistant_message(supabase, chat_id: str, user_id: str, content: str, widgets: list[dict]):
@@ -281,12 +281,19 @@ def send_message_stream(
                     yield f"data: {data}\n\n"
 
                 elif event_type == "tool_completed":
-                    data = json.dumps({"type": "tool_completed", "tool_name": event.get("tool_name", "")})
+                    tool_widgets = event.get("widgets", [])
+                    if tool_widgets:
+                        widgets.extend(tool_widgets)
+                    data = json.dumps({
+                        "type": "tool_completed",
+                        "tool_name": event.get("tool_name", ""),
+                        "widgets": tool_widgets,
+                    })
                     yield f"data: {data}\n\n"
 
                 elif event_type == "done":
                     full_content = event.get("content", "")
-                    widgets = event.get("widgets", [])
+                    # widgets already collected from tool_completed events
 
             # Apply guardrails to final content
             if full_content:

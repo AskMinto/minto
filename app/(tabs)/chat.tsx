@@ -118,19 +118,37 @@ export default function ChatScreen() {
             }
             return updated;
           });
-        } else if (event.type === 'done') {
-          streamWidgets = event.widgets || [];
+        } else if (event.type === 'tool_completed' && event.widgets?.length) {
+          // Render widgets immediately as each tool finishes
+          streamWidgets = [...streamWidgets, ...event.widgets];
+          const currentWidgets = streamWidgets;
           setMessages((prev) => {
             const updated = [...prev];
             const lastIdx = updated.length - 1;
             if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
               updated[lastIdx] = {
                 ...updated[lastIdx],
-                metadata: streamWidgets.length ? { widgets: streamWidgets } : {},
+                metadata: { widgets: currentWidgets },
               };
             }
             return updated;
           });
+        } else if (event.type === 'done') {
+          // Final widget list (in case any were missed)
+          const finalWidgets = event.widgets?.length ? event.widgets : streamWidgets;
+          if (finalWidgets.length) {
+            setMessages((prev) => {
+              const updated = [...prev];
+              const lastIdx = updated.length - 1;
+              if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+                updated[lastIdx] = {
+                  ...updated[lastIdx],
+                  metadata: { widgets: finalWidgets },
+                };
+              }
+              return updated;
+            });
+          }
         }
       });
     } catch {
