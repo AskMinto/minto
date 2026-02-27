@@ -121,19 +121,34 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
         result_str = tool_exec.result or ""
 
         try:
-            result = json.loads(result_str) if result_str else {}
+            result = json.loads(result_str) if result_str else None
         except (json.JSONDecodeError, TypeError):
-            result = {}
+            result = result_str  # Keep raw string for tools that return plain text
 
-        if name == "get_current_stock_price" and isinstance(result, dict):
-            price = result.get("price") or result.get("current_price")
+        # get_current_stock_price returns a plain decimal string like "1201.7000"
+        if name == "get_current_stock_price":
+            price = None
+            symbol = args.get("symbol", "")
+            if isinstance(result, (int, float)):
+                price = float(result)
+            elif isinstance(result, str):
+                try:
+                    price = float(result)
+                except ValueError:
+                    pass
             if price:
+                # Strip .NS/.BO suffix for display
+                display_symbol = symbol
+                for suffix in (".NS", ".BO", ".ns", ".bo"):
+                    if display_symbol.endswith(suffix):
+                        display_symbol = display_symbol[:-len(suffix)]
+                        break
                 widgets.append({
                     "type": "ticker_card",
                     "data": {
-                        "symbol": result.get("symbol") or args.get("symbol", ""),
+                        "symbol": display_symbol,
                         "price": price,
-                        "previous_close": result.get("previous_close"),
+                        "previous_close": None,
                     },
                 })
 
@@ -148,25 +163,38 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
                 },
             })
 
-        elif name == "get_company_news" and isinstance(result, (list, str)):
-            items = result if isinstance(result, list) else []
-            if items:
-                news_items = []
-                for item in items[:5]:
-                    if isinstance(item, dict):
-                        news_items.append({
-                            "title": item.get("title", ""),
-                            "link": item.get("link") or item.get("url", ""),
-                            "publisher": item.get("publisher", ""),
-                        })
-                if news_items:
-                    widgets.append({
-                        "type": "news_card",
-                        "data": {
-                            "query": args.get("symbol", ""),
-                            "items": news_items,
-                        },
+        # get_company_news returns JSON array with nested content objects:
+        # [{"id": "...", "content": {"title": "...", ...}, ...}, ...]
+        elif name == "get_company_news" and isinstance(result, list):
+            news_items = []
+            for item in result[:5]:
+                if not isinstance(item, dict):
+                    continue
+                # News data can be nested in "content" sub-object
+                content_obj = item.get("content", item)
+                title = content_obj.get("title", "")
+                link = (
+                    content_obj.get("canonicalUrl", {}).get("url", "")
+                    or content_obj.get("link", "")
+                    or content_obj.get("url", "")
+                    or item.get("link", "")
+                    or item.get("url", "")
+                )
+                publisher = content_obj.get("provider", {}).get("displayName", "") if isinstance(content_obj.get("provider"), dict) else content_obj.get("publisher", "")
+                if title:
+                    news_items.append({
+                        "title": title,
+                        "link": link,
+                        "publisher": publisher,
                     })
+            if news_items:
+                widgets.append({
+                    "type": "news_card",
+                    "data": {
+                        "query": args.get("symbol", ""),
+                        "items": news_items,
+                    },
+                })
 
     # Deduplicate widgets by type+key
     seen = set()
