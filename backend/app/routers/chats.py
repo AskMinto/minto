@@ -292,6 +292,7 @@ def send_message_stream(
     def event_generator():
         full_content = ""
         widgets: list[dict] = []
+        print("[MINTO] Stream starting")
         try:
             for event in run_research_agent_stream(
                 system_prompt, prompt, chat_history=recent_history
@@ -304,30 +305,21 @@ def send_message_stream(
                     yield f"data: {data}\n\n"
 
                 elif event_type == "tool_started":
-                    logger.info(f"Tool started: {event.get('tool_name', '')}")
-                    data = json.dumps({"type": "tool_started", "tool_name": event.get("tool_name", "")})
-                    yield f"data: {data}\n\n"
+                    print(f"[MINTO] Tool started: {event.get('tool_name', '')}")
 
                 elif event_type == "tool_completed":
                     tool_widgets = event.get("widgets", [])
-                    logger.info(f"Tool completed: {event.get('tool_name', '')}, widgets={len(tool_widgets)}")
+                    print(f"[MINTO] Tool completed: {event.get('tool_name', '')}, widgets={len(tool_widgets)}")
                     if tool_widgets:
                         widgets.extend(tool_widgets)
-                    data = json.dumps({
-                        "type": "tool_completed",
-                        "tool_name": event.get("tool_name", ""),
-                        "widgets": tool_widgets,
-                    })
-                    yield f"data: {data}\n\n"
 
                 elif event_type == "done":
                     full_content = event.get("content", "")
 
-            # Apply guardrails to final content
-            logger.info("Before guardrails: content_len=%d, widgets=%d", len(full_content), len(widgets))
+            print(f"[MINTO] Before guardrails: content_len={len(full_content)}, widgets={len(widgets)}")
             if full_content:
                 full_content, widgets = _apply_guardrails(full_content, widgets)
-            logger.info("After guardrails: content_len=%d, widgets=%d", len(full_content), len(widgets))
+            print(f"[MINTO] After guardrails: content_len={len(full_content)}, widgets={len(widgets)}")
 
         except (AgentNotConfigured, GeminiNotConfigured):
             full_content = (
@@ -337,18 +329,19 @@ def send_message_stream(
             yield f"data: {data}\n\n"
 
         except Exception as e:
-            logger.exception("Streaming agent error")
+            print(f"[MINTO] Streaming error: {e}")
             full_content = "Something went wrong. Please try again."
             data = json.dumps({"type": "token", "content": full_content})
             yield f"data: {data}\n\n"
 
-        # Save to DB BEFORE sending done — so loadMessages() on the client finds it
+        # Save to DB BEFORE sending done
         if full_content:
-            logger.info("Saving message: widgets=%d", len(widgets))
+            print(f"[MINTO] Saving: widgets={len(widgets)}")
             _save_assistant_message(supabase, chat_id, user.user_id, full_content, widgets)
             add_memory(user.user_id, f"User: {payload.content}\nAssistant: {full_content}")
 
         done_data = json.dumps({"type": "done", "widgets": widgets})
+        print(f"[MINTO] Done event: {done_data[:200]}")
         yield f"data: {done_data}\n\n"
 
     return StreamingResponse(
