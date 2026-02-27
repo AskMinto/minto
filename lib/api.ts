@@ -75,7 +75,9 @@ export interface SSEEvent {
 
 /**
  * Stream SSE events from a POST endpoint using XMLHttpRequest.
- * Uses XHR instead of fetch ReadableStream for React Native compatibility.
+ * Uses XHR with line buffering for React Native compatibility.
+ * On iOS, onprogress may batch chunks — the buffer ensures partial
+ * lines aren't dropped when a data: line is split across calls.
  */
 export function apiStream(
   path: string,
@@ -91,6 +93,7 @@ export function apiStream(
     const token = await getAccessToken();
     const url = `${API_BASE_URL}${path}`;
     let processedLength = 0;
+    let lineBuffer = '';
 
     const xhr = new XMLHttpRequest();
     xhr.open('POST', url, true);
@@ -99,8 +102,12 @@ export function apiStream(
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     }
 
-    function parseSSEChunk(text: string) {
-      const lines = text.split('\n');
+    function processChunk(text: string) {
+      lineBuffer += text;
+      const lines = lineBuffer.split('\n');
+      // Keep last element — it may be an incomplete line
+      lineBuffer = lines.pop() || '';
+
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed.startsWith('data: ')) continue;
@@ -110,8 +117,27 @@ export function apiStream(
           const event: SSEEvent = JSON.parse(jsonStr);
           onEvent(event);
         } catch {
-          // Skip malformed events
+          // Skip malformed JSON
         }
+      }
+    }
+
+    function flush() {
+      // Process anything left in the buffer
+      if (lineBuffer.trim()) {
+        const trimmed = lineBuffer.trim();
+        if (trimmed.startsWith('data: ')) {
+          const jsonStr = trimmed.slice(6);
+          if (jsonStr) {
+            try {
+              const event: SSEEvent = JSON.parse(jsonStr);
+              onEvent(event);
+            } catch {
+              // Skip
+            }
+          }
+        }
+        lineBuffer = '';
       }
     }
 
@@ -119,7 +145,7 @@ export function apiStream(
       const newText = xhr.responseText.slice(processedLength);
       processedLength = xhr.responseText.length;
       if (newText) {
-        parseSSEChunk(newText);
+        processChunk(newText);
       }
     };
 
@@ -127,8 +153,9 @@ export function apiStream(
       // Process any remaining data not caught by onprogress
       const remaining = xhr.responseText.slice(processedLength);
       if (remaining) {
-        parseSSEChunk(remaining);
+        processChunk(remaining);
       }
+      flush();
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve();
       } else {
@@ -144,7 +171,7 @@ export function apiStream(
       reject(new Error('Stream request timed out'));
     };
 
-    xhr.timeout = 120000; // 2 minute timeout for long research queries
+    xhr.timeout = 120000;
     xhr.send(JSON.stringify(body));
   });
 }

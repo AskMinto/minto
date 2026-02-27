@@ -134,21 +134,19 @@ export default function ChatScreen() {
             return updated;
           });
         } else if (event.type === 'done') {
-          // Final widget list (in case any were missed)
+          // Use server's final widget list, or fall back to what we collected from tool events
           const finalWidgets = event.widgets?.length ? event.widgets : streamWidgets;
-          if (finalWidgets.length) {
-            setMessages((prev) => {
-              const updated = [...prev];
-              const lastIdx = updated.length - 1;
-              if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
-                updated[lastIdx] = {
-                  ...updated[lastIdx],
-                  metadata: { widgets: finalWidgets },
-                };
-              }
-              return updated;
-            });
-          }
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+              updated[lastIdx] = {
+                ...updated[lastIdx],
+                metadata: finalWidgets.length ? { widgets: finalWidgets } : {},
+              };
+            }
+            return updated;
+          });
         }
       });
     } catch {
