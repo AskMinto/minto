@@ -314,29 +314,26 @@ def send_message_stream(
             if full_content:
                 full_content, widgets = _apply_guardrails(full_content, widgets)
 
-            done_data = json.dumps({"type": "done", "widgets": widgets})
-            yield f"data: {done_data}\n\n"
-
         except (AgentNotConfigured, GeminiNotConfigured):
             full_content = (
-                "AI is not configured yet. Please set GEMINI_API_KEY to enable chat responses.\n\n"
-                f"{ASSISTANT_DISCLAIMER}"
+                "AI is not configured yet. Please set GEMINI_API_KEY to enable chat responses."
             )
             data = json.dumps({"type": "token", "content": full_content})
             yield f"data: {data}\n\n"
-            yield f"data: {json.dumps({'type': 'done', 'widgets': []})}\n\n"
 
         except Exception as e:
             logger.exception("Streaming agent error")
-            full_content = f"Something went wrong. Please try again.\n\n{ASSISTANT_DISCLAIMER}"
+            full_content = "Something went wrong. Please try again."
             data = json.dumps({"type": "token", "content": full_content})
             yield f"data: {data}\n\n"
-            yield f"data: {json.dumps({'type': 'done', 'widgets': []})}\n\n"
 
-        # Persist the message after streaming completes
+        # Save to DB BEFORE sending done — so loadMessages() on the client finds it
         if full_content:
             _save_assistant_message(supabase, chat_id, user.user_id, full_content, widgets)
             add_memory(user.user_id, f"User: {payload.content}\nAssistant: {full_content}")
+
+        done_data = json.dumps({"type": "done", "widgets": widgets})
+        yield f"data: {done_data}\n\n"
 
     return StreamingResponse(
         event_generator(),
