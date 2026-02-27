@@ -16,6 +16,10 @@ SUPABASE_JWT_SECRET = _get_env("SUPABASE_JWT_SECRET")
 
 GEMINI_API_KEY = _get_env("GEMINI_API_KEY")
 
+# Agno's Gemini model reads GOOGLE_API_KEY from env
+if GEMINI_API_KEY and not os.getenv("GOOGLE_API_KEY"):
+    os.environ["GOOGLE_API_KEY"] = GEMINI_API_KEY
+
 MEM0_PROJECT_KEY = _get_env("MEM0_PROJECT_KEY")
 MEM0_API_KEY = _get_env("MEM0_API_KEY")
 MEM0_BASE_URL = _get_env("MEM0_BASE_URL", "https://api.mem0.ai/v1")

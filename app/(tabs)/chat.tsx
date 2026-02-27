@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoid
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Send, MessageCircle, TrendingUp, Newspaper } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { apiGet, apiPost } from '../../lib/api';
+import { apiGet, apiPost, apiStream, SSEEvent } from '../../lib/api';
 import { useFocusEffect } from '@react-navigation/native';
 
 function TickerCard({ data, onPress }: { data: any; onPress?: () => void }) {
@@ -98,18 +98,68 @@ export default function ChatScreen() {
     setInput('');
     setSending(true);
     setMessages((prev) => [...prev, { role: 'user', content }]);
+
+    // Add an empty assistant bubble that we'll fill token-by-token
+    const assistantIndex = messages.length + 1; // +1 for the user message we just added
+    setMessages((prev) => [...prev, { role: 'assistant', content: '', metadata: {} }]);
+
+    let streamedContent = '';
+    let streamWidgets: any[] = [];
+
     try {
-      const response = await apiPost<{ reply: string; widgets?: any[] }>('/chat/message', { content });
-      setMessages((prev) => [...prev, {
-        role: 'assistant',
-        content: response.reply,
-        metadata: response.widgets?.length ? { widgets: response.widgets } : {},
-      }]);
+      await apiStream('/chat/message/stream', { content }, (event: SSEEvent) => {
+        if (event.type === 'token' && event.content) {
+          streamedContent += event.content;
+          const updatedContent = streamedContent;
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+              updated[lastIdx] = { ...updated[lastIdx], content: updatedContent };
+            }
+            return updated;
+          });
+        } else if (event.type === 'done') {
+          streamWidgets = event.widgets || [];
+          setMessages((prev) => {
+            const updated = [...prev];
+            const lastIdx = updated.length - 1;
+            if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+              updated[lastIdx] = {
+                ...updated[lastIdx],
+                metadata: streamWidgets.length ? { widgets: streamWidgets } : {},
+              };
+            }
+            return updated;
+          });
+        }
+      });
     } catch {
-      setMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: 'Something went wrong. Please try again.' },
-      ]);
+      // Fallback to non-streaming endpoint
+      try {
+        const response = await apiPost<{ reply: string; widgets?: any[] }>('/chat/message', { content });
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastIdx = updated.length - 1;
+          if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+            updated[lastIdx] = {
+              role: 'assistant',
+              content: response.reply,
+              metadata: response.widgets?.length ? { widgets: response.widgets } : {},
+            };
+          }
+          return updated;
+        });
+      } catch {
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastIdx = updated.length - 1;
+          if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+            updated[lastIdx] = { role: 'assistant', content: 'Something went wrong. Please try again.' };
+          }
+          return updated;
+        });
+      }
     } finally {
       setSending(false);
     }
@@ -151,13 +201,18 @@ export default function ChatScreen() {
 
           {messages.map((message, index) => {
             const widgets = message.metadata?.widgets || [];
+            const isEmptyAssistant = message.role === 'assistant' && !message.content && sending;
             return (
               <View key={`${message.role}-${index}`}>
                 <View style={message.role === 'user' ? styles.messageRowRight : styles.messageRowLeft}>
                   <View style={message.role === 'user' ? styles.userBubble : styles.botBubble}>
-                    <Text style={message.role === 'user' ? styles.userText : styles.botText}>
-                      {message.content}
-                    </Text>
+                    {isEmptyAssistant ? (
+                      <Text style={styles.typingText}>Thinking...</Text>
+                    ) : (
+                      <Text style={message.role === 'user' ? styles.userText : styles.botText}>
+                        {message.content}
+                      </Text>
+                    )}
                   </View>
                 </View>
                 {message.role === 'assistant' && widgets.length > 0 && (
@@ -189,13 +244,7 @@ export default function ChatScreen() {
             );
           })}
 
-          {sending && (
-            <View style={styles.messageRowLeft}>
-              <View style={styles.botBubble}>
-                <Text style={styles.typingText}>Thinking...</Text>
-              </View>
-            </View>
-          )}
+
         </ScrollView>
 
         <View style={styles.inputContainer}>
