@@ -8,6 +8,7 @@ from agno.agent import Agent, RunOutput, RunEvent
 from agno.models.google import Gemini
 from agno.tools.yfinance import YFinanceTools
 from agno.tools.newspaper4k import Newspaper4kTools
+from agno.tools.duckduckgo import DuckDuckGoTools
 
 from ..core.config import GEMINI_API_KEY
 from .mfapi_service import get_latest_nav as mf_get_nav, search_schemes
@@ -23,16 +24,24 @@ AGENT_INSTRUCTIONS = [
     "- You have NO knowledge of current stock prices. Your training data prices are OUTDATED.",
     "- Before stating ANY stock price, you MUST call get_current_stock_price first.",
     "- Before stating ANY mutual fund NAV, you MUST call _get_mf_nav first.",
-    "- Before discussing ANY news, you MUST call get_company_news first.",
     "- For Indian stocks, ALWAYS use the .NS suffix (e.g., HDFCBANK.NS, SBIN.NS, TCS.NS).",
     "- Report the EXACT number the tool returns. Never round, adjust, or estimate.",
-    "- If a tool errors, say 'price data unavailable right now'. NEVER make up a number.",
+    "- If a tool errors, say 'data unavailable right now'. NEVER make up a number.",
     "- NEVER ask the user 'would you like me to look that up?' — just look it up.",
     "",
+    "RESEARCH STRATEGY — pick the right tool:",
+    "- Stock-specific news → get_company_news (uses Yahoo Finance, needs .NS/.BO symbol)",
+    "- Broader topics, macro events, general market news → web_search (DuckDuckGo)",
+    "- Breaking news, trending topics → search_news (DuckDuckGo News)",
+    "- Full article content from a URL → read_article",
+    "- Market indices (Nifty, Sensex, Bank Nifty) → _get_market_overview",
+    "- For complex questions, use MULTIPLE tools: search first, then read articles for depth.",
+    "",
     "RESEARCH PROCESS:",
-    "1. When asked about news or reasons for price moves, call get_company_news first",
-    "2. READ full articles using read_article — don't just skim headlines",
-    "3. Synthesize into a clear, punchy answer",
+    "1. For any question about current events or news, SEARCH first using the appropriate tool",
+    "2. If you find interesting articles, READ them using read_article for full context",
+    "3. Cross-reference with portfolio holdings and market data when relevant",
+    "4. Synthesize into a clear, punchy answer backed by real facts",
     "",
     "RESPONSE RULES:",
     "- Keep it tight: 3-5 sentences unless they ask for more detail",
@@ -57,6 +66,40 @@ def _get_mf_nav(scheme_code: int) -> str:
     """
     result = mf_get_nav(scheme_code)
     return json.dumps(result) if result else json.dumps({"error": "Scheme not found"})
+
+
+def _get_market_overview() -> str:
+    """Get current Indian market overview including Nifty 50, Sensex, and Bank Nifty indices.
+
+    Returns:
+        JSON string with current index levels and day changes.
+    """
+    import yfinance as yf
+    indices = {
+        "^NSEI": "Nifty 50",
+        "^BSESN": "Sensex",
+        "^NSEBANK": "Bank Nifty",
+    }
+    results = []
+    for symbol, name in indices.items():
+        try:
+            ticker = yf.Ticker(symbol)
+            hist = ticker.history(period="2d", interval="1d")
+            if hist is not None and not hist.empty:
+                close = float(hist["Close"].iloc[-1])
+                prev = float(hist["Close"].iloc[-2]) if len(hist) > 1 else None
+                change = close - prev if prev else None
+                change_pct = (change / prev * 100) if prev and prev != 0 else None
+                results.append({
+                    "name": name,
+                    "symbol": symbol,
+                    "value": round(close, 2),
+                    "change": round(change, 2) if change else None,
+                    "change_pct": round(change_pct, 2) if change_pct else None,
+                })
+        except Exception:
+            continue
+    return json.dumps(results) if results else json.dumps({"error": "Could not fetch market data"})
 
 
 def _search_instrument(query: str) -> str:
@@ -98,13 +141,20 @@ def _build_agent(system_prompt: str, chat_history: list[dict] | None = None) -> 
         article_length=3000,
     )
 
+    ddg_tools = DuckDuckGoTools(
+        enable_search=True,
+        enable_news=True,
+        fixed_max_results=5,
+        region="in-en",
+    )
+
     agent = Agent(
-        model=Gemini(id="gemini-3-flash-preview", temperature=0.3),
-        tools=[yf_tools, newspaper_tools, _get_mf_nav, _search_instrument],
+        model=Gemini(id="gemini-2.0-flash", temperature=0),
+        tools=[yf_tools, newspaper_tools, ddg_tools, _get_mf_nav, _search_instrument, _get_market_overview],
         description=system_prompt,
         instructions=AGENT_INSTRUCTIONS,
         markdown=False,
-        tool_call_limit=8,
+        tool_call_limit=12,
         add_datetime_to_context=True,
     )
     return agent
