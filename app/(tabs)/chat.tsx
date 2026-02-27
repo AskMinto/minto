@@ -60,9 +60,11 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const loadMessages = async () => {
+  const hasLoadedOnce = useRef(false);
+
+  const loadMessages = async (showLoader = false) => {
     try {
-      setLoading(true);
+      if (showLoader) setLoading(true);
       const data = await apiGet<{ messages: any[] }>('/chat/messages');
       setMessages(data.messages || []);
     } catch {
@@ -70,16 +72,19 @@ export default function ChatScreen() {
       setMessages([]);
     } finally {
       setLoading(false);
+      hasLoadedOnce.current = true;
     }
   };
 
   useEffect(() => {
-    loadMessages();
+    loadMessages(true);
   }, []);
 
   useFocusEffect(
     useCallback(() => {
-      loadMessages();
+      if (hasLoadedOnce.current) {
+        loadMessages(false);
+      }
     }, [])
   );
 
