@@ -108,6 +108,7 @@ export default function DashboardScreen() {
 
   const totals = dashboard?.totals || {};
   const topHoldings = dashboard?.top_holdings || [];
+  const mfHoldings = dashboard?.mf_holdings || [];
   const sectorSplit = dashboard?.sector_split || [];
   const mcapSplit = dashboard?.mcap_split || [];
   const assetSplit = dashboard?.asset_split || [];
@@ -222,6 +223,48 @@ export default function DashboardScreen() {
             </Pressable>
           );
         })}
+
+        {/* Mutual funds */}
+        {mfHoldings.length > 0 && (
+          <>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Mutual funds</Text>
+              <Pressable style={styles.arrowCircle} onPress={() => router.push('/portfolio/holdings')}>
+                <ArrowRight color="#000" size={16} />
+              </Pressable>
+            </View>
+
+            {mfHoldings.map((mf: any) => {
+              const mfPnlColor = (mf.pnl_pct || 0) >= 0 ? '#a2b082' : '#ff6b6b';
+              return (
+                <Pressable
+                  key={mf.id || mf.isin}
+                  style={styles.holdingRow}
+                  onPress={() => {
+                    if (mf.scheme_code) {
+                      router.push(`/instrument/mf/${mf.scheme_code}`);
+                    }
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.holdingSymbol} numberOfLines={1}>
+                      {mf.scheme_name || mf.isin || 'Mutual Fund'}
+                    </Text>
+                    <Text style={styles.holdingMeta}>
+                      {mf.qty} units · ₹{mf.current_price?.toFixed(2) ?? '—'} NAV
+                    </Text>
+                  </View>
+                  <View style={{ alignItems: 'flex-end' }}>
+                    <Text style={styles.holdingValue}>{formatCurrency(mf.value || 0)}</Text>
+                    <Text style={[styles.holdingPnl, { color: mfPnlColor }]}>
+                      {formatPct(mf.pnl_pct || 0)}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </>
+        )}
 
         {/* Asset split bar */}
         {assetSplit.length > 0 && (

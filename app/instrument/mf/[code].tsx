@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Plus } from 'lucide-react-native';
+import { ArrowLeft } from 'lucide-react-native';
 import Svg, { Path, Line } from 'react-native-svg';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { apiGet } from '../../../lib/api';
@@ -139,11 +139,6 @@ export default function MFDetailScreen() {
               )}
             </View>
 
-            {/* Add to portfolio CTA */}
-            <Pressable style={styles.ctaButton} onPress={handleAddToPortfolio}>
-              <Plus color="#0a0d0b" size={18} />
-              <Text style={styles.ctaText}>Add to portfolio</Text>
-            </Pressable>
           </>
         )}
       </ScrollView>
@@ -304,20 +299,5 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     textAlign: 'right',
     maxWidth: '60%',
-  },
-  ctaButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#a2b082',
-    borderRadius: 28,
-    paddingVertical: 16,
-    marginTop: 8,
-  },
-  ctaText: {
-    color: '#0a0d0b',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });

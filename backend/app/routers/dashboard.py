@@ -21,9 +21,16 @@ def get_dashboard(user: UserContext = Depends(get_user_context)):
     holdings = result.data or []
     portfolio = compute_portfolio(holdings)
     flags = concentration_flags(holdings)
+    mf_holdings = sorted(
+        [h for h in portfolio["holdings"] if h.get("scheme_code")],
+        key=lambda x: x.get("value", 0),
+        reverse=True,
+    )
+
     return {
         "totals": portfolio["totals"],
         "top_holdings": portfolio["top_holdings"],
+        "mf_holdings": mf_holdings,
         "sector_split": portfolio["sector_split"],
         "mcap_split": portfolio["mcap_split"],
         "asset_split": portfolio["asset_split"],

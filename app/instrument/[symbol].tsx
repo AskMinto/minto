@@ -72,10 +72,6 @@ export default function EquityDetailScreen() {
   const changeColor = detail?.change != null && detail.change >= 0 ? '#a2b082' : '#ff6b6b';
   const ChangeIcon = detail?.change != null && detail.change >= 0 ? TrendingUp : TrendingDown;
 
-  const handleAddToPortfolio = () => {
-    router.push('/portfolio/add-holding');
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -153,11 +149,6 @@ export default function EquityDetailScreen() {
               </View>
             )}
 
-            {/* Add to portfolio CTA */}
-            <Pressable style={styles.ctaButton} onPress={handleAddToPortfolio}>
-              <Plus color="#0a0d0b" size={18} />
-              <Text style={styles.ctaText}>Add to portfolio</Text>
-            </Pressable>
           </>
         )}
       </ScrollView>
@@ -297,20 +288,5 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 11,
     marginTop: 4,
-  },
-  ctaButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: '#a2b082',
-    borderRadius: 28,
-    paddingVertical: 16,
-    marginTop: 8,
-  },
-  ctaText: {
-    color: '#0a0d0b',
-    fontSize: 16,
-    fontWeight: '600',
   },
 });
