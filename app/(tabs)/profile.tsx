@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Link2 } from 'lucide-react-native';
 import { supabase } from '../../lib/supabase';
+import { Theme } from '../../constants/Theme';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -41,7 +42,7 @@ export default function ProfileScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.content}>
         <Text style={styles.title}>Profile</Text>
         <Text style={styles.subtitle}>Your preferences and settings.</Text>
@@ -56,7 +57,7 @@ export default function ProfileScreen() {
 
         <Pressable style={styles.card} onPress={() => router.push('/portfolio/connections')}>
           <View style={styles.cardRow}>
-            <Link2 color="#a2b082" size={18} />
+            <Link2 color={Theme.colors.accent} size={18} />
             <View style={{ flex: 1 }}>
               <Text style={styles.cardLabel}>Connections</Text>
               <Text style={styles.cardDescription}>Manage broker integrations</Text>
@@ -76,37 +77,38 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1C211E',
   },
   content: {
     paddingHorizontal: 24,
     paddingTop: 40,
   },
   title: {
-    color: '#fff',
+    fontFamily: Theme.font.familyBold,
+    color: Theme.colors.textPrimary,
     fontSize: 24,
-    fontWeight: 'bold',
     marginBottom: 8,
   },
   subtitle: {
-    color: '#a2b082',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 14,
     marginBottom: 24,
   },
   card: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 20,
+    backgroundColor: Theme.colors.cardBg,
+    borderRadius: Theme.radius.card,
     padding: 20,
     marginBottom: 24,
   },
   cardLabel: {
-    color: '#a2b082',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textMuted,
     fontSize: 12,
   },
   cardValue: {
-    color: '#fff',
+    fontFamily: Theme.font.familyBold,
+    color: Theme.colors.textPrimary,
     fontSize: 16,
-    fontWeight: '600',
     marginTop: 6,
     marginBottom: 12,
   },
@@ -115,10 +117,11 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 8,
     paddingHorizontal: 14,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(61,90,62,0.1)',
   },
   secondaryText: {
-    color: '#fff',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.accent,
     fontSize: 12,
   },
   cardRow: {
@@ -127,26 +130,27 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   cardDescription: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 12,
     marginTop: 2,
   },
   cardChevron: {
-    color: '#888',
+    color: Theme.colors.textMuted,
     fontSize: 22,
   },
   logoutButton: {
-    backgroundColor: 'rgba(255, 68, 68, 0.1)',
+    backgroundColor: 'rgba(196,72,62,0.08)',
     paddingHorizontal: 32,
     paddingVertical: 12,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: 'rgba(255, 68, 68, 0.3)',
+    borderColor: 'rgba(196,72,62,0.2)',
     alignItems: 'center',
   },
   logoutButtonText: {
-    color: '#ff4444',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.negative,
     fontSize: 16,
-    fontWeight: '600',
   },
 });

@@ -1,13 +1,19 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
+import {
+  DMSans_400Regular,
+  DMSans_500Medium,
+  DMSans_700Bold,
+} from '@expo-google-fonts/dm-sans';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useCallback, useEffect, useState } from 'react';
 import 'react-native-reanimated';
-import { useColorScheme } from '@/components/useColorScheme';
 import { supabase } from '../lib/supabase';
 import { Session } from '@supabase/supabase-js';
 import { OnboardingContext } from '../lib/onboarding';
+import AnimatedGradient from '../components/AnimatedGradient';
+import { Theme } from '../constants/Theme';
 
 export {
   ErrorBoundary,
@@ -17,11 +23,26 @@ export const unstable_settings = {
   initialRouteName: 'index',
 };
 
+const MintoTheme = {
+  ...DefaultTheme,
+  colors: {
+    ...DefaultTheme.colors,
+    background: 'transparent',
+    card: 'transparent',
+    text: Theme.colors.textPrimary,
+    border: 'transparent',
+    primary: Theme.colors.accent,
+  },
+};
+
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
   const [loaded, error] = useFonts({
     SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
+    DMSans_400Regular,
+    DMSans_500Medium,
+    DMSans_700Bold,
   });
 
   useEffect(() => {
@@ -42,7 +63,6 @@ export default function RootLayout() {
 }
 
 function RootLayoutNav() {
-  const colorScheme = useColorScheme();
   const [session, setSession] = useState<Session | null>(null);
   const [initialized, setInitialized] = useState(false);
   const [onboardingState, setOnboardingState] = useState<'loading' | 'needsAck' | 'needsQuiz' | 'complete'>('loading');
@@ -134,13 +154,15 @@ function RootLayoutNav() {
 
   return (
     <OnboardingContext.Provider value={{ recheckOnboarding: checkOnboarding }}>
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#1C211E' } }}>
-          <Stack.Screen name="index" />
-          <Stack.Screen name="login" options={{ presentation: 'modal' }} />
-          <Stack.Screen name="(onboarding)" />
-          <Stack.Screen name="(tabs)" />
-        </Stack>
+      <ThemeProvider value={MintoTheme}>
+        <AnimatedGradient>
+          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="login" options={{ presentation: 'modal' }} />
+            <Stack.Screen name="(onboarding)" />
+            <Stack.Screen name="(tabs)" />
+          </Stack>
+        </AnimatedGradient>
       </ThemeProvider>
     </OnboardingContext.Provider>
   );

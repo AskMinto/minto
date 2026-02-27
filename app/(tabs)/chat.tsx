@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Linking, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Send, MessageCircle, TrendingUp, Newspaper, Plus, X, ExternalLink } from 'lucide-react-native';
+import { Send, TrendingUp, TrendingDown, Newspaper, Plus, X, ExternalLink } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { apiGet, apiStream, SSEEvent } from '../../lib/api';
 import { useFocusEffect } from '@react-navigation/native';
+import { Theme } from '../../constants/Theme';
+import { supabase } from '../../lib/supabase';
+
+const DEFAULT_COMMENTARY = "Markets are vibing. Are you?";
 
 function PriceSummaryWidget({ data, onPress }: { data: any; onPress: () => void }) {
   const items = data.items || [];
@@ -18,7 +22,7 @@ function PriceSummaryWidget({ data, onPress }: { data: any; onPress: () => void 
   return (
     <Pressable style={styles.widgetCard} onPress={onPress}>
       <View style={styles.widgetIconBox}>
-        <TrendingUp color="#a2b082" size={16} />
+        <TrendingUp color={Theme.colors.accent} size={16} />
       </View>
       <View style={styles.widgetInfo}>
         <Text style={styles.widgetLabel} numberOfLines={1}>{label}</Text>
@@ -26,7 +30,7 @@ function PriceSummaryWidget({ data, onPress }: { data: any; onPress: () => void 
       </View>
       {extra > 0 && (
         <View style={styles.badgeCircle}>
-          <Plus color="#fff" size={12} />
+          <Plus color={Theme.colors.accent} size={12} />
           <Text style={styles.badgeText}>{extra}</Text>
         </View>
       )}
@@ -42,17 +46,17 @@ function NewsSummaryWidget({ data, onPress }: { data: any; onPress: () => void }
 
   return (
     <Pressable style={styles.widgetCard} onPress={onPress}>
-      <View style={[styles.widgetIconBox, { backgroundColor: 'rgba(209,176,124,0.15)' }]}>
-        <Newspaper color="#d1b07c" size={16} />
+      <View style={[styles.widgetIconBox, { backgroundColor: 'rgba(184,148,62,0.12)' }]}>
+        <Newspaper color={Theme.colors.goldAccent} size={16} />
       </View>
       <View style={styles.widgetInfo}>
         <Text style={styles.widgetLabel} numberOfLines={1}>{first.title}</Text>
         <Text style={styles.widgetSub} numberOfLines={1}>{first.publisher || 'News'}</Text>
       </View>
       {extra > 0 && (
-        <View style={[styles.badgeCircle, { backgroundColor: 'rgba(209,176,124,0.25)' }]}>
-          <Plus color="#d1b07c" size={12} />
-          <Text style={[styles.badgeText, { color: '#d1b07c' }]}>{extra}</Text>
+        <View style={[styles.badgeCircle, { backgroundColor: 'rgba(184,148,62,0.15)' }]}>
+          <Plus color={Theme.colors.goldAccent} size={12} />
+          <Text style={[styles.badgeText, { color: Theme.colors.goldAccent }]}>{extra}</Text>
         </View>
       )}
     </Pressable>
@@ -66,7 +70,7 @@ function PriceModal({ visible, items, onClose }: { visible: boolean; items: any[
         <Pressable style={styles.modalSheet} onPress={() => {}}>
           <View style={styles.modalHandle} />
           <Pressable style={styles.modalCloseBtn} onPress={onClose}>
-            <X color="#888" size={20} />
+            <X color={Theme.colors.textMuted} size={20} />
           </Pressable>
           <Text style={styles.modalTitle}>Price Lookups</Text>
           <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
@@ -78,7 +82,7 @@ function PriceModal({ visible, items, onClose }: { visible: boolean; items: any[
               return (
                 <View key={`price-${i}`} style={styles.modalRow}>
                   <View style={styles.widgetIconBox}>
-                    <TrendingUp color="#a2b082" size={16} />
+                    <TrendingUp color={Theme.colors.accent} size={16} />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.modalRowLabel}>{label}</Text>
@@ -102,7 +106,7 @@ function NewsModal({ visible, items, onClose }: { visible: boolean; items: any[]
         <Pressable style={styles.modalSheet} onPress={() => {}}>
           <View style={styles.modalHandle} />
           <Pressable style={styles.modalCloseBtn} onPress={onClose}>
-            <X color="#888" size={20} />
+            <X color={Theme.colors.textMuted} size={20} />
           </Pressable>
           <Text style={styles.modalTitle}>Related News</Text>
           <ScrollView style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
@@ -116,13 +120,32 @@ function NewsModal({ visible, items, onClose }: { visible: boolean; items: any[]
                   <Text style={styles.modalNewsTitle}>{item.title}</Text>
                   <Text style={styles.modalNewsMeta}>{item.publisher || ''}</Text>
                 </View>
-                {item.link ? <ExternalLink color="#555" size={14} /> : null}
+                {item.link ? <ExternalLink color={Theme.colors.textMuted} size={14} /> : null}
               </Pressable>
             ))}
           </ScrollView>
         </Pressable>
       </Pressable>
     </Modal>
+  );
+}
+
+function MarketBadge({ label, value, change }: { label: string; value: string; change: number }) {
+  const isUp = change >= 0;
+  const Icon = isUp ? TrendingUp : TrendingDown;
+  const badgeColor = isUp ? Theme.colors.positive : Theme.colors.negative;
+
+  return (
+    <View style={styles.marketBadge}>
+      <Text style={styles.marketBadgeLabel}>{label}</Text>
+      <Text style={styles.marketBadgeValue}>{value}</Text>
+      <View style={styles.marketBadgeChange}>
+        <Icon color={badgeColor} size={10} />
+        <Text style={[styles.marketBadgeChangeTxt, { color: badgeColor }]}>
+          {isUp ? '+' : ''}{change.toFixed(1)}%
+        </Text>
+      </View>
+    </View>
   );
 }
 
@@ -135,8 +158,30 @@ export default function ChatScreen() {
   const [loading, setLoading] = useState(true);
   const [priceModalItems, setPriceModalItems] = useState<any[]>([]);
   const [newsModalItems, setNewsModalItems] = useState<any[]>([]);
+  const [userName, setUserName] = useState('');
+  const [commentary, setCommentary] = useState(DEFAULT_COMMENTARY);
+  const [marketBadges, setMarketBadges] = useState<{ label: string; value: string; change: number }[]>([]);
 
   const hasLoadedOnce = useRef(false);
+
+  useEffect(() => {
+    // Load home context from backend (user name, market badges, commentary)
+    apiGet<any>('/chat/home-context')
+      .then((ctx) => {
+        if (ctx.user_name) setUserName(ctx.user_name);
+        if (ctx.commentary) setCommentary(ctx.commentary);
+        if (ctx.market_badges) setMarketBadges(ctx.market_badges);
+      })
+      .catch(() => {
+        // Fallback: get name from Supabase session
+        supabase.auth.getSession().then(({ data }) => {
+          const name = data.session?.user?.user_metadata?.full_name
+            || data.session?.user?.email?.split('@')[0]
+            || '';
+          setUserName(name.split(' ')[0]);
+        });
+      });
+  }, []);
 
   const loadMessages = async (showLoader = false) => {
     try {
@@ -221,16 +266,10 @@ export default function ChatScreen() {
     }
   };
 
+  const showHome = !loading && messages.length === 0;
+
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Minto Chat</Text>
-      </View>
-
-      <View style={styles.disclaimer}>
-        <Text style={styles.disclaimerText}>Informational only. No buy/sell recommendations.</Text>
-      </View>
-
+    <SafeAreaView style={styles.container} edges={['top']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -239,20 +278,42 @@ export default function ChatScreen() {
         <ScrollView
           ref={scrollRef}
           contentContainerStyle={styles.chatContent}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          onContentSizeChange={() => {
+            if (!showHome) scrollRef.current?.scrollToEnd({ animated: true });
+          }}
         >
-          {loading && messages.length === 0 && (
-            <Text style={styles.loadingText}>Loading...</Text>
+          {/* ── Greeting / Home state ── */}
+          {showHome && (
+            <View style={styles.homeSection}>
+              <Text style={styles.greeting}>
+                Hey{userName ? ` ${userName}` : ''}
+              </Text>
+
+              <View style={styles.badgesRow}>
+                {marketBadges.length > 0 ? (
+                  marketBadges.map((b, i) => (
+                    <MarketBadge key={i} label={b.label} value={b.value} change={b.change} />
+                  ))
+                ) : (
+                  <>
+                    <MarketBadge label="NIFTY 50" value="—" change={0} />
+                    <MarketBadge label="SENSEX" value="—" change={0} />
+                  </>
+                )}
+              </View>
+
+              <Text style={styles.commentaryText}>{commentary}</Text>
+
+              <View style={styles.disclaimerPill}>
+                <Text style={styles.disclaimerText}>
+                  Informational only · No buy/sell advice
+                </Text>
+              </View>
+            </View>
           )}
 
-          {!loading && messages.length === 0 && (
-            <View style={styles.emptyState}>
-              <MessageCircle color="#a2b082" size={32} />
-              <Text style={styles.emptyTitle}>Ask Minto anything</Text>
-              <Text style={styles.emptyText}>
-                Ask about your portfolio, market concepts, risk, or how your holdings are performing.
-              </Text>
-            </View>
+          {loading && messages.length === 0 && (
+            <Text style={styles.loadingText}>Loading...</Text>
           )}
 
           {messages.map((message, index) => {
@@ -299,15 +360,13 @@ export default function ChatScreen() {
               </View>
             );
           })}
-
-
         </ScrollView>
 
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.textInput}
-            placeholder="Ask about your portfolio..."
-            placeholderTextColor="#777"
+            placeholder="Ask me anything..."
+            placeholderTextColor={Theme.colors.textMuted}
             value={input}
             onChangeText={setInput}
             onSubmitEditing={handleSend}
@@ -315,7 +374,7 @@ export default function ChatScreen() {
             editable={!sending}
           />
           <Pressable style={[styles.sendButton, sending && styles.sendButtonDisabled]} onPress={handleSend} disabled={sending}>
-            <Send color="#000" size={20} />
+            <Send color={Theme.colors.white} size={18} />
           </Pressable>
         </View>
       </KeyboardAvoidingView>
@@ -337,62 +396,90 @@ export default function ChatScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1C211E',
   },
   flex: {
     flex: 1,
-  },
-  header: {
-    alignItems: 'center',
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  disclaimer: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    marginHorizontal: 20,
-    padding: 10,
-    borderRadius: 12,
-    marginBottom: 6,
-  },
-  disclaimerText: {
-    color: '#a2b082',
-    fontSize: 11,
-    textAlign: 'center',
   },
   chatContent: {
     paddingHorizontal: 20,
     paddingBottom: 10,
     flexGrow: 1,
   },
+
+  /* ── Home / Greeting ── */
+  homeSection: {
+    paddingTop: 24,
+    paddingBottom: 20,
+  },
+  greeting: {
+    fontFamily: Theme.font.familyBold,
+    fontSize: 36,
+    color: Theme.colors.textPrimary,
+    marginBottom: 20,
+  },
+  badgesRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 24,
+  },
+  marketBadge: {
+    flex: 1,
+    backgroundColor: Theme.colors.cardBg,
+    borderRadius: Theme.radius.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  marketBadgeLabel: {
+    fontFamily: Theme.font.familyMedium,
+    fontSize: 11,
+    color: Theme.colors.textMuted,
+  },
+  marketBadgeValue: {
+    fontFamily: Theme.font.familyBold,
+    fontSize: 13,
+    color: Theme.colors.textPrimary,
+  },
+  marketBadgeChange: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  marketBadgeChangeTxt: {
+    fontFamily: Theme.font.familyMedium,
+    fontSize: 11,
+  },
+  commentaryText: {
+    fontFamily: Theme.font.familyBold,
+    fontSize: 28,
+    color: Theme.colors.textPrimary,
+    lineHeight: 36,
+    marginBottom: 20,
+  },
+  disclaimerPill: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(61,90,62,0.1)',
+    borderRadius: Theme.radius.pill,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  disclaimerText: {
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textMuted,
+    fontSize: 11,
+  },
+
   loadingText: {
-    color: '#a2b082',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 12,
     textAlign: 'center',
     marginTop: 20,
   },
-  emptyState: {
-    alignItems: 'center',
-    marginTop: 60,
-    paddingHorizontal: 30,
-  },
-  emptyTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '600',
-    marginTop: 16,
-    marginBottom: 8,
-  },
-  emptyText: {
-    color: '#888',
-    fontSize: 13,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
+
+  /* ── Messages ── */
   messageRowRight: {
     alignItems: 'flex-end',
     marginBottom: 14,
@@ -402,62 +489,73 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   userBubble: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: Theme.colors.cardBg,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 12,
     maxWidth: '80%',
   },
   userText: {
-    color: '#fff',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textPrimary,
     fontSize: 14,
     lineHeight: 20,
   },
   botBubble: {
-    backgroundColor: '#fff',
+    backgroundColor: Theme.colors.white,
     borderRadius: 20,
     padding: 16,
     maxWidth: '85%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 2,
   },
   botText: {
-    color: '#333',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textPrimary,
     fontSize: 14,
     lineHeight: 20,
   },
   typingText: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 13,
     fontStyle: 'italic',
   },
+
+  /* ── Input ── */
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 12,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.06)',
   },
   textInput: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 24,
+    backgroundColor: Theme.colors.inputBg,
+    borderRadius: Theme.radius.input,
     paddingHorizontal: 20,
-    paddingVertical: 12,
-    color: '#fff',
+    paddingVertical: 14,
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textPrimary,
     fontSize: 14,
-    marginRight: 12,
+    marginRight: 10,
   },
   sendButton: {
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#a2b082',
+    backgroundColor: Theme.colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
   },
   sendButtonDisabled: {
     opacity: 0.5,
   },
+
+  /* ── Widgets ── */
   widgetsContainer: {
     marginBottom: 14,
     gap: 8,
@@ -465,7 +563,7 @@ const styles = StyleSheet.create({
   widgetCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: Theme.colors.cardBg,
     borderRadius: 16,
     padding: 12,
     gap: 10,
@@ -474,7 +572,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 10,
-    backgroundColor: 'rgba(162,176,130,0.15)',
+    backgroundColor: 'rgba(61,90,62,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -482,41 +580,39 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   widgetLabel: {
-    color: '#fff',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textPrimary,
     fontSize: 13,
-    fontWeight: '600',
   },
   widgetSub: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 11,
     marginTop: 2,
-  },
-  widgetValue: {
-    color: '#a2b082',
-    fontSize: 14,
-    fontWeight: '700',
   },
   badgeCircle: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(162,176,130,0.25)',
+    backgroundColor: 'rgba(61,90,62,0.12)',
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 4,
     gap: 2,
   },
   badgeText: {
-    color: '#a2b082',
+    fontFamily: Theme.font.familyBold,
+    color: Theme.colors.accent,
     fontSize: 11,
-    fontWeight: '700',
   },
+
+  /* ── Modals ── */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'flex-end',
   },
   modalSheet: {
-    backgroundColor: '#1C211E',
+    backgroundColor: '#f2f5ef',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '70%',
@@ -526,7 +622,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(0,0,0,0.12)',
     alignSelf: 'center',
     marginTop: 10,
     marginBottom: 8,
@@ -538,15 +634,15 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(0,0,0,0.05)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
   },
   modalTitle: {
-    color: '#fff',
+    fontFamily: Theme.font.familyBold,
+    color: Theme.colors.textPrimary,
     fontSize: 16,
-    fontWeight: '700',
     paddingHorizontal: 24,
     marginTop: 4,
     marginBottom: 16,
@@ -564,22 +660,23 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: 'rgba(0,0,0,0.06)',
   },
   modalRowLabel: {
-    color: '#fff',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textPrimary,
     fontSize: 14,
-    fontWeight: '600',
   },
   modalRowSub: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 11,
     marginTop: 2,
   },
   modalRowValue: {
-    color: '#a2b082',
+    fontFamily: Theme.font.familyBold,
+    color: Theme.colors.accent,
     fontSize: 15,
-    fontWeight: '700',
   },
   modalNewsRow: {
     flexDirection: 'row',
@@ -587,15 +684,17 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: 'rgba(0,0,0,0.06)',
   },
   modalNewsTitle: {
-    color: '#fff',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textPrimary,
     fontSize: 13,
     lineHeight: 18,
   },
   modalNewsMeta: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 11,
     marginTop: 4,
   },

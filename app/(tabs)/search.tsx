@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search as SearchIcon, TrendingUp, TrendingDown, Building2, X, Newspaper } from 'lucide-react-native';
 import Svg, { Path, Line } from 'react-native-svg';
 import { apiGet } from '../../lib/api';
+import { Theme } from '../../constants/Theme';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const MODAL_CHART_WIDTH = SCREEN_WIDTH - 96;
@@ -35,11 +36,11 @@ function MiniPriceChart({ data }: { data: { date: string; close: number }[] }) {
   }));
   const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
   const isPositive = closes[closes.length - 1] >= closes[0];
-  const strokeColor = isPositive ? '#a2b082' : '#ff6b6b';
+  const strokeColor = isPositive ? Theme.colors.positive : Theme.colors.negative;
 
   return (
     <Svg width={MODAL_CHART_WIDTH} height={MODAL_CHART_HEIGHT}>
-      <Line x1={0} y1={MODAL_CHART_HEIGHT} x2={MODAL_CHART_WIDTH} y2={MODAL_CHART_HEIGHT} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
+      <Line x1={0} y1={MODAL_CHART_HEIGHT} x2={MODAL_CHART_WIDTH} y2={MODAL_CHART_HEIGHT} stroke="rgba(0,0,0,0.06)" strokeWidth={1} />
       <Path d={pathD} stroke={strokeColor} strokeWidth={2} fill="none" />
     </Svg>
   );
@@ -60,11 +61,11 @@ function MiniNavChart({ data }: { data: { date: string; nav: number }[] }) {
   }));
   const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
   const isPositive = navs[navs.length - 1] >= navs[0];
-  const strokeColor = isPositive ? '#a2b082' : '#ff6b6b';
+  const strokeColor = isPositive ? Theme.colors.positive : Theme.colors.negative;
 
   return (
     <Svg width={MODAL_CHART_WIDTH} height={MODAL_CHART_HEIGHT}>
-      <Line x1={0} y1={MODAL_CHART_HEIGHT} x2={MODAL_CHART_WIDTH} y2={MODAL_CHART_HEIGHT} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
+      <Line x1={0} y1={MODAL_CHART_HEIGHT} x2={MODAL_CHART_WIDTH} y2={MODAL_CHART_HEIGHT} stroke="rgba(0,0,0,0.06)" strokeWidth={1} />
       <Path d={pathD} stroke={strokeColor} strokeWidth={2} fill="none" />
     </Svg>
   );
@@ -117,7 +118,7 @@ function InstrumentModal({
   }, [visible, item]);
 
   const isMF = item?.type === 'MUTUAL_FUND';
-  const changeColor = detail?.change != null && detail.change >= 0 ? '#a2b082' : '#ff6b6b';
+  const changeColor = detail?.change != null && detail.change >= 0 ? Theme.colors.positive : Theme.colors.negative;
   const ChangeIcon = detail?.change != null && detail.change >= 0 ? TrendingUp : TrendingDown;
 
   return (
@@ -129,11 +130,11 @@ function InstrumentModal({
 
           {/* Close button */}
           <Pressable style={styles.modalClose} onPress={onClose}>
-            <X color="#888" size={20} />
+            <X color={Theme.colors.textMuted} size={20} />
           </Pressable>
 
           <ScrollView showsVerticalScrollIndicator={false} style={styles.modalScroll} contentContainerStyle={styles.modalScrollContent}>
-            {loading && <ActivityIndicator color="#a2b082" style={{ marginTop: 24 }} />}
+            {loading && <ActivityIndicator color={Theme.colors.accent} style={{ marginTop: 24 }} />}
 
             {!loading && detail && !isMF && (
               <>
@@ -144,7 +145,7 @@ function InstrumentModal({
                 <View style={styles.modalPriceRow}>
                   <Text style={styles.modalPrice}>{formatCurrency(detail.price)}</Text>
                   {detail.change != null && (
-                    <View style={[styles.modalChangeBadge, { backgroundColor: detail.change >= 0 ? 'rgba(162,176,130,0.18)' : 'rgba(255,107,107,0.18)' }]}>
+                    <View style={[styles.modalChangeBadge, { backgroundColor: detail.change >= 0 ? 'rgba(61,139,79,0.12)' : 'rgba(196,72,62,0.12)' }]}>
                       <ChangeIcon color={changeColor} size={12} />
                       <Text style={[styles.modalChangeText, { color: changeColor }]}>
                         {detail.change >= 0 ? '+' : ''}{detail.change?.toFixed(2)} ({detail.change_pct?.toFixed(2)}%)
@@ -211,7 +212,7 @@ function InstrumentModal({
                       return (
                         <View key={period} style={styles.modalReturnItem}>
                           <Text style={styles.modalReturnPeriod}>{period.toUpperCase()}</Text>
-                          <Text style={[styles.modalReturnValue, { color: isPos ? '#a2b082' : '#ff6b6b' }]}>
+                          <Text style={[styles.modalReturnValue, { color: isPos ? Theme.colors.positive : Theme.colors.negative }]}>
                             {isPos ? '+' : ''}{value.toFixed(2)}%
                           </Text>
                         </View>
@@ -234,7 +235,7 @@ function InstrumentModal({
                     onPress={() => n.link && Linking.openURL(n.link)}
                   >
                     <View style={styles.modalNewsContent}>
-                      <Newspaper color="#888" size={14} style={{ marginTop: 2 }} />
+                      <Newspaper color={Theme.colors.textMuted} size={14} style={{ marginTop: 2 }} />
                       <View style={{ flex: 1 }}>
                         <Text style={styles.modalNewsTitle} numberOfLines={2}>{n.title}</Text>
                         <Text style={styles.modalNewsMeta}>{n.publisher || ''}</Text>
@@ -299,18 +300,18 @@ export default function SearchScreen() {
   }, []);
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.headerContainer}>
         <Text style={styles.title}>Search</Text>
         <Text style={styles.subtitle}>Find stocks and mutual funds</Text>
       </View>
 
       <View style={styles.searchBar}>
-        <SearchIcon color="#888" size={18} />
+        <SearchIcon color={Theme.colors.textMuted} size={18} />
         <TextInput
           style={styles.searchInput}
           placeholder="Search stocks, MF schemes..."
-          placeholderTextColor="#666"
+          placeholderTextColor={Theme.colors.textMuted}
           value={query}
           onChangeText={setQuery}
           autoCorrect={false}
@@ -319,7 +320,7 @@ export default function SearchScreen() {
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {searching && (
-          <ActivityIndicator color="#a2b082" style={{ marginTop: 20 }} />
+          <ActivityIndicator color={Theme.colors.accent} style={{ marginTop: 20 }} />
         )}
 
         {!searching && query.trim() && results.length === 0 && (
@@ -335,7 +336,7 @@ export default function SearchScreen() {
               onPress={() => handlePress(item)}
             >
               <View style={[styles.typeBadge, isMF ? styles.mfBadge : styles.eqBadge]}>
-                {isMF ? <Building2 color="#d1b07c" size={14} /> : <TrendingUp color="#a2b082" size={14} />}
+                {isMF ? <Building2 color={Theme.colors.goldAccent} size={14} /> : <TrendingUp color={Theme.colors.accent} size={14} />}
               </View>
               <View style={styles.resultInfo}>
                 <Text style={styles.resultName} numberOfLines={1}>
@@ -384,7 +385,6 @@ export default function SearchScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1C211E',
   },
   headerContainer: {
     paddingHorizontal: 24,
@@ -392,20 +392,21 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   title: {
-    color: '#fff',
+    fontFamily: Theme.font.familyBold,
+    color: Theme.colors.textPrimary,
     fontSize: 24,
-    fontWeight: '700',
   },
   subtitle: {
-    color: '#a2b082',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 14,
     marginTop: 4,
   },
   searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 20,
+    backgroundColor: Theme.colors.inputBg,
+    borderRadius: Theme.radius.input,
     marginHorizontal: 24,
     marginTop: 12,
     marginBottom: 8,
@@ -415,7 +416,8 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     paddingVertical: 14,
-    color: '#fff',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textPrimary,
     fontSize: 15,
   },
   scrollContent: {
@@ -423,7 +425,8 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   emptyText: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 13,
     textAlign: 'center',
     marginTop: 40,
@@ -431,7 +434,7 @@ const styles = StyleSheet.create({
   resultRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: Theme.colors.cardBg,
     borderRadius: 16,
     padding: 14,
     marginBottom: 10,
@@ -445,21 +448,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   eqBadge: {
-    backgroundColor: 'rgba(162,176,130,0.15)',
+    backgroundColor: 'rgba(61,90,62,0.1)',
   },
   mfBadge: {
-    backgroundColor: 'rgba(209,176,124,0.15)',
+    backgroundColor: 'rgba(184,148,62,0.1)',
   },
   resultInfo: {
     flex: 1,
   },
   resultName: {
-    color: '#fff',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textPrimary,
     fontSize: 14,
-    fontWeight: '600',
   },
   resultMeta: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 12,
     marginTop: 3,
   },
@@ -469,42 +473,44 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   eqTag: {
-    backgroundColor: 'rgba(162,176,130,0.2)',
+    backgroundColor: 'rgba(61,90,62,0.12)',
   },
   mfTag: {
-    backgroundColor: 'rgba(209,176,124,0.2)',
+    backgroundColor: 'rgba(184,148,62,0.12)',
   },
   typeTagText: {
+    fontFamily: Theme.font.familyMedium,
     fontSize: 11,
-    fontWeight: '600',
   },
   eqTagText: {
-    color: '#a2b082',
+    color: Theme.colors.accent,
   },
   mfTagText: {
-    color: '#d1b07c',
+    color: Theme.colors.goldAccent,
   },
   newsSection: {
     marginTop: 16,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: Theme.colors.cardBg,
     borderRadius: 18,
     padding: 16,
   },
   newsSectionTitle: {
-    color: '#fff',
+    fontFamily: Theme.font.familyBold,
+    color: Theme.colors.textPrimary,
     fontSize: 14,
-    fontWeight: '600',
     marginBottom: 12,
   },
   newsRow: {
     marginBottom: 12,
   },
   newsTitle: {
-    color: '#fff',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textPrimary,
     fontSize: 13,
   },
   newsMeta: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 11,
     marginTop: 4,
   },
@@ -512,11 +518,11 @@ const styles = StyleSheet.create({
   /* ── Modal styles ─────────────────────────────────────────────── */
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'flex-end',
   },
   modalSheet: {
-    backgroundColor: '#1C211E',
+    backgroundColor: '#f2f5ef',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     maxHeight: '85%',
@@ -526,7 +532,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(0,0,0,0.12)',
     alignSelf: 'center',
     marginTop: 10,
     marginBottom: 8,
@@ -538,7 +544,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(0,0,0,0.05)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 10,
@@ -552,14 +558,15 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   modalName: {
-    color: '#fff',
+    fontFamily: Theme.font.familyBold,
+    color: Theme.colors.textPrimary,
     fontSize: 18,
-    fontWeight: '700',
     marginTop: 4,
     paddingRight: 36,
   },
   modalMeta: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 12,
     marginTop: 4,
   },
@@ -571,9 +578,9 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalPrice: {
-    color: '#fff',
+    fontFamily: Theme.font.familyBold,
+    color: Theme.colors.textPrimary,
     fontSize: 24,
-    fontWeight: '700',
   },
   modalChangeBadge: {
     flexDirection: 'row',
@@ -584,24 +591,26 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   modalChangeText: {
+    fontFamily: Theme.font.familyMedium,
     fontSize: 12,
-    fontWeight: '600',
   },
   modalChartCard: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: Theme.colors.cardBg,
     borderRadius: 16,
     padding: 14,
     marginBottom: 14,
     alignItems: 'center',
   },
   modalChartLabel: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 11,
     alignSelf: 'flex-start',
     marginBottom: 10,
   },
   chartEmpty: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 11,
     paddingVertical: 16,
   },
@@ -612,32 +621,33 @@ const styles = StyleSheet.create({
   },
   modalStatItem: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: Theme.colors.cardBg,
     borderRadius: 12,
     padding: 10,
     alignItems: 'center',
   },
   modalStatLabel: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 10,
     marginBottom: 4,
   },
   modalStatValue: {
-    color: '#fff',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textPrimary,
     fontSize: 12,
-    fontWeight: '600',
   },
   modalNewsSection: {
     marginTop: 2,
   },
   modalNewsSectionTitle: {
-    color: '#fff',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textPrimary,
     fontSize: 13,
-    fontWeight: '600',
     marginBottom: 8,
   },
   modalNewsRow: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: Theme.colors.cardBg,
     borderRadius: 12,
     padding: 10,
     marginBottom: 6,
@@ -648,41 +658,45 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   modalNewsTitle: {
-    color: '#fff',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textPrimary,
     fontSize: 12,
   },
   modalNewsMeta: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 10,
     marginTop: 3,
   },
   modalCategoryBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(209,176,124,0.2)',
+    backgroundColor: 'rgba(184,148,62,0.12)',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 8,
     marginTop: 8,
   },
   modalCategoryText: {
-    color: '#d1b07c',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.goldAccent,
     fontSize: 11,
-    fontWeight: '600',
   },
   modalNavLabel: {
-    color: '#a2b082',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textMuted,
     fontSize: 11,
     marginBottom: 4,
   },
   modalNavDate: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 10,
     alignSelf: 'flex-end',
   },
   modalReturnsRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: Theme.colors.cardBg,
     borderRadius: 14,
     padding: 14,
     marginBottom: 14,
@@ -691,19 +705,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalReturnPeriod: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 10,
     marginBottom: 4,
   },
   modalReturnValue: {
+    fontFamily: Theme.font.familyBold,
     fontSize: 14,
-    fontWeight: '700',
   },
   modalErrorText: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 13,
     textAlign: 'center',
     marginTop: 32,
   },
-
 });

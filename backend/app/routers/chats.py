@@ -32,6 +32,65 @@ class MessageCreate(BaseModel):
     content: str
 
 
+MARKET_COMMENTARIES = [
+    "Nifty's up but your portfolio isn't — classic.",
+    "Markets are vibing. Are you?",
+    "Sensex said 📈, your watchlist said 🤷",
+    "Green day in the markets. Let's see your P&L.",
+    "Bulls are running. Bears are napping.",
+    "Another day, another Nifty record. Maybe.",
+    "The market doesn't care about your feelings.",
+    "Flat markets today. Perfect time to do nothing.",
+]
+
+
+@router.get("/home-context")
+def get_home_context(user: UserContext = Depends(get_user_context)):
+    """Return data for the Ask Minto home screen: user name, market badges, commentary."""
+    import random
+    from ..services.yfinance_service import get_quote
+
+    supabase = get_supabase_client(user.token)
+
+    # User name from Supabase auth metadata
+    try:
+        user_resp = supabase.auth.get_user()
+        metadata = user_resp.user.user_metadata if user_resp and user_resp.user else {}
+        full_name = metadata.get("full_name", metadata.get("name", ""))
+        user_name = full_name.split(" ")[0] if full_name else ""
+    except Exception:
+        user_name = ""
+
+    # Market badges — Nifty 50 and Sensex
+    nifty = get_quote("^NSEI", None)
+    sensex = get_quote("^BSESN", None)
+
+    def _badge(label: str, data: dict) -> dict:
+        price = data.get("price")
+        prev = data.get("previous_close")
+        change_pct = 0.0
+        if price and prev and prev > 0:
+            change_pct = ((price - prev) / prev) * 100
+        return {
+            "label": label,
+            "value": f"{price:,.0f}" if price else "—",
+            "change": round(change_pct, 2),
+        }
+
+    badges = [
+        _badge("NIFTY 50", nifty),
+        _badge("SENSEX", sensex),
+    ]
+
+    commentary = random.choice(MARKET_COMMENTARIES)
+
+    return {
+        "user_name": user_name,
+        "market_badges": badges,
+        "commentary": commentary,
+    }
+
+
 def _get_or_create_thread(supabase, user_id: str) -> str:
     """Return the single chat thread for a user, creating one if none exists."""
     result = (

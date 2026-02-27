@@ -6,8 +6,9 @@ import Svg, { G, Path, Circle } from 'react-native-svg';
 import { useRouter } from 'expo-router';
 import { apiGet } from '../../lib/api';
 import { useFocusEffect } from '@react-navigation/native';
+import { Theme } from '../../constants/Theme';
 
-const COLORS = ['#a2b082', '#5c7c6f', '#d1b07c', '#7b5c5c', '#8aa3b2', '#b28aa3'];
+const COLORS = ['#3d5a3e', '#5c7c6f', '#b8943e', '#7b5c5c', '#6a8fa0', '#9a7daa'];
 
 function polarToCartesian(cx: number, cy: number, r: number, angle: number) {
   const rad = (angle * Math.PI) / 180;
@@ -61,7 +62,7 @@ function DonutChart({
           );
         })}
       </G>
-      <Circle cx={size / 2} cy={size / 2} r={radius - strokeWidth / 2} fill="#1C211E" />
+      <Circle cx={size / 2} cy={size / 2} r={radius - strokeWidth / 2} fill="rgba(255,255,255,0.4)" />
     </Svg>
   );
 }
@@ -114,8 +115,8 @@ export default function DashboardScreen() {
   const assetSplit = dashboard?.asset_split || [];
   const riskFlags = dashboard?.concentration_flags || [];
 
-  const pnlColor = (totals.pnl || 0) >= 0 ? '#a2b082' : '#ff6b6b';
-  const todayColor = (totals.today_pnl || 0) >= 0 ? '#a2b082' : '#ff6b6b';
+  const pnlColor = (totals.pnl || 0) >= 0 ? Theme.colors.positive : Theme.colors.negative;
+  const todayColor = (totals.today_pnl || 0) >= 0 ? Theme.colors.positive : Theme.colors.negative;
 
   const sectorData = useMemo(
     () =>
@@ -136,7 +137,7 @@ export default function DashboardScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <View>
@@ -175,11 +176,11 @@ export default function DashboardScreen() {
         {/* Quick actions */}
         <View style={styles.actionsRow}>
           <Pressable style={styles.actionButton} onPress={() => router.push('/portfolio/add-holding')}>
-            <Plus color="#0a0d0b" size={16} />
+            <Plus color={Theme.colors.white} size={16} />
             <Text style={styles.actionText}>Add Holding</Text>
           </Pressable>
           <Pressable style={styles.actionButton} onPress={() => router.push('/portfolio/connections')}>
-            <Upload color="#0a0d0b" size={16} />
+            <Upload color={Theme.colors.white} size={16} />
             <Text style={styles.actionText}>Import from Zerodha</Text>
           </Pressable>
         </View>
@@ -188,12 +189,12 @@ export default function DashboardScreen() {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Top holdings</Text>
           <Pressable style={styles.arrowCircle} onPress={() => router.push('/portfolio/holdings')}>
-            <ArrowRight color="#000" size={16} />
+            <ArrowRight color={Theme.colors.textPrimary} size={16} />
           </Pressable>
         </View>
 
         {topHoldings.map((holding: any) => {
-          const holdingPnlColor = (holding.pnl_pct || 0) >= 0 ? '#a2b082' : '#ff6b6b';
+          const holdingPnlColor = (holding.pnl_pct || 0) >= 0 ? Theme.colors.positive : Theme.colors.negative;
           return (
             <Pressable
               key={holding.id || holding.isin}
@@ -230,12 +231,12 @@ export default function DashboardScreen() {
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Mutual funds</Text>
               <Pressable style={styles.arrowCircle} onPress={() => router.push('/portfolio/holdings')}>
-                <ArrowRight color="#000" size={16} />
+                <ArrowRight color={Theme.colors.textPrimary} size={16} />
               </Pressable>
             </View>
 
             {mfHoldings.map((mf: any) => {
-              const mfPnlColor = (mf.pnl_pct || 0) >= 0 ? '#a2b082' : '#ff6b6b';
+              const mfPnlColor = (mf.pnl_pct || 0) >= 0 ? Theme.colors.positive : Theme.colors.negative;
               return (
                 <Pressable
                   key={mf.id || mf.isin}
@@ -272,7 +273,7 @@ export default function DashboardScreen() {
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Asset allocation</Text>
               <View style={styles.arrowCircle}>
-                <Briefcase color="#000" size={16} />
+                <Briefcase color={Theme.colors.textPrimary} size={16} />
               </View>
             </View>
             <View style={styles.assetBarContainer}>
@@ -306,7 +307,7 @@ export default function DashboardScreen() {
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Breakdown</Text>
           <View style={styles.arrowCircle}>
-            <PieIcon color="#000" size={16} />
+            <PieIcon color={Theme.colors.textPrimary} size={16} />
           </View>
         </View>
 
@@ -353,7 +354,7 @@ export default function DashboardScreen() {
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionTitle}>Concentration risk</Text>
               <View style={styles.arrowCircle}>
-                <AlertTriangle color="#000" size={16} />
+                <AlertTriangle color={Theme.colors.textPrimary} size={16} />
               </View>
             </View>
             {riskFlags.map((flag: any) => (
@@ -376,7 +377,6 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1C211E',
   },
   scrollContent: {
     paddingHorizontal: 24,
@@ -390,45 +390,48 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   greetingText: {
-    color: '#a2b082',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textSecondary,
     fontSize: 22,
-    fontWeight: '500',
   },
   nameText: {
-    color: '#fff',
+    fontFamily: Theme.font.familyBold,
+    color: Theme.colors.textPrimary,
     fontSize: 28,
-    fontWeight: '700',
   },
   refreshButton: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: Theme.colors.cardBg,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
   },
   refreshText: {
-    color: '#fff',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textPrimary,
     fontSize: 12,
   },
   errorText: {
-    color: '#ff6b6b',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.negative,
     marginBottom: 16,
   },
   totalCard: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: Theme.colors.cardBg,
     borderRadius: 24,
     padding: 24,
     alignItems: 'center',
     marginBottom: 16,
   },
   totalLabel: {
-    color: '#a2b082',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textMuted,
     fontSize: 13,
     marginBottom: 8,
   },
   totalValue: {
-    color: '#fff',
+    fontFamily: Theme.font.familyBold,
+    color: Theme.colors.textPrimary,
     fontSize: 32,
-    fontWeight: '700',
   },
   summaryRow: {
     flexDirection: 'row',
@@ -437,22 +440,24 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: Theme.colors.cardBg,
     borderRadius: 18,
     padding: 14,
   },
   summaryLabel: {
-    color: '#a2b082',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textMuted,
     fontSize: 11,
     marginBottom: 6,
   },
   summaryValue: {
-    color: '#fff',
+    fontFamily: Theme.font.familyBold,
+    color: Theme.colors.textPrimary,
     fontSize: 15,
-    fontWeight: '700',
   },
   summarySub: {
-    color: '#ddd',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textSecondary,
     fontSize: 11,
     marginTop: 3,
   },
@@ -467,14 +472,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#a2b082',
+    backgroundColor: Theme.colors.accent,
     borderRadius: 20,
     paddingVertical: 12,
   },
   actionText: {
-    color: '#0a0d0b',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.white,
     fontSize: 13,
-    fontWeight: '600',
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -484,15 +489,15 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   sectionTitle: {
-    color: '#fff',
+    fontFamily: Theme.font.familyBold,
+    color: Theme.colors.textPrimary,
     fontSize: 18,
-    fontWeight: '600',
   },
   arrowCircle: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#fff',
+    backgroundColor: Theme.colors.cardBg,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -500,27 +505,29 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
+    backgroundColor: Theme.colors.cardBg,
     borderRadius: 16,
     padding: 14,
     marginBottom: 10,
   },
   holdingSymbol: {
-    color: '#fff',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textPrimary,
     fontSize: 14,
-    fontWeight: '600',
   },
   holdingMeta: {
-    color: '#a2b082',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 12,
     marginTop: 4,
   },
   holdingValue: {
-    color: '#fff',
+    fontFamily: Theme.font.familyBold,
+    color: Theme.colors.textPrimary,
     fontSize: 14,
-    fontWeight: '600',
   },
   holdingPnl: {
+    fontFamily: Theme.font.familyMedium,
     fontSize: 12,
     marginTop: 4,
   },
@@ -551,12 +558,14 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   legendLabel: {
-    color: '#ccc',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textSecondary,
     fontSize: 12,
     flexShrink: 1,
   },
   legendPct: {
-    color: '#888',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 11,
     marginLeft: 'auto',
   },
@@ -566,8 +575,8 @@ const styles = StyleSheet.create({
   },
   breakdownCard: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 20,
+    backgroundColor: Theme.colors.cardBg,
+    borderRadius: Theme.radius.card,
     padding: 14,
     marginBottom: 12,
   },
@@ -576,13 +585,14 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   chartTitle: {
-    color: '#fff',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textPrimary,
     fontSize: 13,
-    fontWeight: '600',
     marginBottom: 10,
   },
   chartEmpty: {
-    color: '#a2b082',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 12,
     textAlign: 'center',
     paddingVertical: 16,
@@ -599,28 +609,30 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   riskYellow: {
-    backgroundColor: 'rgba(210, 180, 90, 0.15)',
+    backgroundColor: 'rgba(184,148,62,0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(210, 180, 90, 0.4)',
+    borderColor: 'rgba(184,148,62,0.3)',
   },
   riskRed: {
-    backgroundColor: 'rgba(255, 100, 100, 0.15)',
+    backgroundColor: 'rgba(196,72,62,0.1)',
     borderWidth: 1,
-    borderColor: 'rgba(255, 100, 100, 0.4)',
+    borderColor: 'rgba(196,72,62,0.3)',
   },
   riskTitle: {
-    color: '#fff',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textPrimary,
     fontSize: 14,
-    fontWeight: '600',
     marginBottom: 4,
   },
   riskMeta: {
-    color: '#a2b082',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 12,
     marginBottom: 6,
   },
   riskWhy: {
-    color: '#ddd',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textSecondary,
     fontSize: 12,
     lineHeight: 18,
   },

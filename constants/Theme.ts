@@ -1,0 +1,32 @@
+export const Theme = {
+  colors: {
+    gradientStart: '#c8d5c0',
+    gradientMid: '#b5c9a8',
+    gradientEnd: '#d4dcc8',
+    textPrimary: '#2d3a2e',
+    textSecondary: '#5a6b5c',
+    textMuted: '#8a9a8c',
+    accent: '#3d5a3e',
+    cardBg: 'rgba(255,255,255,0.55)',
+    cardBorder: 'rgba(255,255,255,0.3)',
+    positive: '#3d8b4f',
+    negative: '#c4483e',
+    tabBarBg: 'rgba(45,58,46,0.85)',
+    tabBarActive: '#2d3a2e',
+    tabBarInactive: 'rgba(255,255,255,0.5)',
+    inputBg: 'rgba(255,255,255,0.6)',
+    white: '#ffffff',
+    goldAccent: '#b8943e',
+  },
+  radius: {
+    card: 20,
+    pill: 24,
+    button: 28,
+    input: 24,
+  },
+  font: {
+    family: 'DMSans_400Regular',
+    familyMedium: 'DMSans_500Medium',
+    familyBold: 'DMSans_700Bold',
+  },
+} as const;

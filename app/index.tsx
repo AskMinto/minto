@@ -2,6 +2,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { BrainCircuit, Edit2, ShieldAlert } from 'lucide-react-native';
+import { Theme } from '../constants/Theme';
 
 export default function IntroScreen() {
   const router = useRouter();
@@ -10,7 +11,7 @@ export default function IntroScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <View style={styles.logoContainer}>
-          <BrainCircuit color="#a2b082" size={24} />
+          <BrainCircuit color={Theme.colors.accent} size={24} />
           <Text style={styles.logoText}>Minto</Text>
         </View>
         <Pressable onPress={() => router.push('/login')}>
@@ -25,21 +26,21 @@ export default function IntroScreen() {
         <View style={styles.features}>
           <View style={styles.featureCard}>
             <View style={styles.iconContainer}>
-              <BrainCircuit color="#fff" size={20} />
+              <BrainCircuit color={Theme.colors.accent} size={20} />
             </View>
             <Text style={styles.featureText}>Chat with Minto to understand your holdings, risk, and market trends in plain language.</Text>
           </View>
 
           <View style={styles.featureCard}>
             <View style={styles.iconContainer}>
-              <Edit2 color="#fff" size={20} />
+              <Edit2 color={Theme.colors.accent} size={20} />
             </View>
             <Text style={styles.featureText}>Track equities and mutual funds in one place. Add manually or upload your CAS statement.</Text>
           </View>
 
           <View style={styles.featureCard}>
             <View style={styles.iconContainer}>
-              <ShieldAlert color="#fff" size={20} />
+              <ShieldAlert color={Theme.colors.accent} size={20} />
             </View>
             <Text style={styles.featureText}>Spot concentration risks, see sector splits, and keep your portfolio balanced.</Text>
           </View>
@@ -61,7 +62,6 @@ export default function IntroScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1C211E',
   },
   header: {
     flexDirection: 'row',
@@ -76,12 +76,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   logoText: {
-    color: '#fff',
+    fontFamily: Theme.font.familyBold,
+    color: Theme.colors.textPrimary,
     fontSize: 18,
-    fontWeight: '600',
   },
   skipText: {
-    color: '#a2b082',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textMuted,
     fontSize: 16,
   },
   content: {
@@ -90,25 +91,25 @@ const styles = StyleSheet.create({
     marginTop: 60,
   },
   title: {
-    color: '#fff',
-    fontSize: 48,
-    fontWeight: '400',
-    lineHeight: 56,
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textPrimary,
+    fontSize: 44,
+    lineHeight: 52,
   },
   highlightTitle: {
-    color: '#a2b082',
-    fontSize: 48,
-    fontWeight: '400',
-    lineHeight: 56,
-    marginTop: -40,
+    fontFamily: Theme.font.family,
+    color: Theme.colors.accent,
+    fontSize: 44,
+    lineHeight: 52,
+    marginTop: -36,
   },
   features: {
     marginTop: 40,
-    gap: 16,
+    gap: 14,
   },
   featureCard: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderRadius: 20,
+    backgroundColor: Theme.colors.cardBg,
+    borderRadius: Theme.radius.card,
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -118,12 +119,13 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(61,90,62,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   featureText: {
-    color: '#ddd',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textSecondary,
     fontSize: 14,
     flex: 1,
     lineHeight: 20,
@@ -136,28 +138,28 @@ const styles = StyleSheet.create({
   },
   loginButton: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: Theme.colors.accent,
     paddingVertical: 16,
-    borderRadius: 30,
+    borderRadius: Theme.radius.button,
     alignItems: 'center',
   },
   loginButtonText: {
-    color: '#000',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.white,
     fontSize: 16,
-    fontWeight: '600',
   },
   signupButton: {
     flex: 1,
     backgroundColor: 'transparent',
     paddingVertical: 16,
-    borderRadius: 30,
+    borderRadius: Theme.radius.button,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#fff',
+    borderWidth: 1.5,
+    borderColor: Theme.colors.accent,
   },
   signupButtonText: {
-    color: '#fff',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.accent,
     fontSize: 16,
-    fontWeight: '600',
   },
 });

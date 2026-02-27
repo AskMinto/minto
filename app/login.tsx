@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import { makeRedirectUri } from 'expo-auth-session';
+import { Theme } from '../constants/Theme';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -75,7 +76,7 @@ export default function LoginScreen() {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#000" />
+            <ActivityIndicator color={Theme.colors.textPrimary} />
           ) : (
             <>
               <Text style={styles.googleButtonText}>Continue with Google</Text>
@@ -94,7 +95,6 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1C211E',
     justifyContent: 'center',
   },
   content: {
@@ -102,34 +102,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    color: '#fff',
+    fontFamily: Theme.font.familyBold,
+    color: Theme.colors.textPrimary,
     fontSize: 32,
-    fontWeight: 'bold',
     marginBottom: 8,
   },
   subtitle: {
-    color: '#a2b082',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 16,
     marginBottom: 48,
   },
   googleButton: {
-    backgroundColor: '#fff',
+    backgroundColor: Theme.colors.white,
     width: '100%',
     paddingVertical: 16,
-    borderRadius: 30,
+    borderRadius: Theme.radius.button,
     alignItems: 'center',
     marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 3,
   },
   googleButtonText: {
-    color: '#000',
+    fontFamily: Theme.font.familyMedium,
+    color: Theme.colors.textPrimary,
     fontSize: 16,
-    fontWeight: '600',
   },
   cancelButton: {
     padding: 16,
   },
   cancelButtonText: {
-    color: '#aaa',
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textMuted,
     fontSize: 14,
   },
 });
