@@ -148,7 +148,7 @@ function RootLayoutNav() {
     }
 
     if (onboardingState === 'complete' && !inTabsGroup && !inAppScreen) {
-      router.replace('/(tabs)/dashboard');
+      router.replace('/(tabs)');
     }
   }, [session, initialized, segments, onboardingState]);
 
