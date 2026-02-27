@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoid
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Send, MessageCircle, TrendingUp, Newspaper } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { apiGet, apiPost, apiStream, SSEEvent } from '../../lib/api';
+import { apiGet, apiStream, SSEEvent } from '../../lib/api';
 import { useFocusEffect } from '@react-navigation/native';
 
 function TickerCard({ data, onPress }: { data: any; onPress?: () => void }) {
@@ -100,7 +100,6 @@ export default function ChatScreen() {
     setMessages((prev) => [...prev, { role: 'user', content }]);
 
     // Add an empty assistant bubble that we'll fill token-by-token
-    const assistantIndex = messages.length + 1; // +1 for the user message we just added
     setMessages((prev) => [...prev, { role: 'assistant', content: '', metadata: {} }]);
 
     let streamedContent = '';
@@ -135,31 +134,14 @@ export default function ChatScreen() {
         }
       });
     } catch {
-      // Fallback to non-streaming endpoint
-      try {
-        const response = await apiPost<{ reply: string; widgets?: any[] }>('/chat/message', { content });
-        setMessages((prev) => {
-          const updated = [...prev];
-          const lastIdx = updated.length - 1;
-          if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
-            updated[lastIdx] = {
-              role: 'assistant',
-              content: response.reply,
-              metadata: response.widgets?.length ? { widgets: response.widgets } : {},
-            };
-          }
-          return updated;
-        });
-      } catch {
-        setMessages((prev) => {
-          const updated = [...prev];
-          const lastIdx = updated.length - 1;
-          if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
-            updated[lastIdx] = { role: 'assistant', content: 'Something went wrong. Please try again.' };
-          }
-          return updated;
-        });
-      }
+      setMessages((prev) => {
+        const updated = [...prev];
+        const lastIdx = updated.length - 1;
+        if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+          updated[lastIdx] = { role: 'assistant', content: 'Something went wrong. Please try again.' };
+        }
+        return updated;
+      });
     } finally {
       setSending(false);
     }

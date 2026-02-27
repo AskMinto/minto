@@ -73,74 +73,78 @@ export interface SSEEvent {
   widgets?: any[];
 }
 
-export async function apiStream(
+/**
+ * Stream SSE events from a POST endpoint using XMLHttpRequest.
+ * Uses XHR instead of fetch ReadableStream for React Native compatibility.
+ */
+export function apiStream(
   path: string,
   body: any,
   onEvent: (event: SSEEvent) => void,
 ): Promise<void> {
-  if (!API_BASE_URL) {
-    throw new Error('EXPO_PUBLIC_API_BASE_URL is not configured');
-  }
-  const token = await getAccessToken();
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
+  return new Promise(async (resolve, reject) => {
+    if (!API_BASE_URL) {
+      reject(new Error('EXPO_PUBLIC_API_BASE_URL is not configured'));
+      return;
+    }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
+    const token = await getAccessToken();
+    const url = `${API_BASE_URL}${path}`;
+    let processedLength = 0;
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    if (token) {
+      xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    }
+
+    function parseSSEChunk(text: string) {
+      const lines = text.split('\n');
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith('data: ')) continue;
+        const jsonStr = trimmed.slice(6);
+        if (!jsonStr) continue;
+        try {
+          const event: SSEEvent = JSON.parse(jsonStr);
+          onEvent(event);
+        } catch {
+          // Skip malformed events
+        }
+      }
+    }
+
+    xhr.onprogress = () => {
+      const newText = xhr.responseText.slice(processedLength);
+      processedLength = xhr.responseText.length;
+      if (newText) {
+        parseSSEChunk(newText);
+      }
+    };
+
+    xhr.onload = () => {
+      // Process any remaining data not caught by onprogress
+      const remaining = xhr.responseText.slice(processedLength);
+      if (remaining) {
+        parseSSEChunk(remaining);
+      }
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve();
+      } else {
+        reject(new Error(xhr.responseText || xhr.statusText));
+      }
+    };
+
+    xhr.onerror = () => {
+      reject(new Error('Network error during streaming'));
+    };
+
+    xhr.ontimeout = () => {
+      reject(new Error('Stream request timed out'));
+    };
+
+    xhr.timeout = 120000; // 2 minute timeout for long research queries
+    xhr.send(JSON.stringify(body));
   });
-
-  if (!response.ok) {
-    const message = await response.text();
-    throw new Error(message || response.statusText);
-  }
-
-  const reader = response.body?.getReader();
-  if (!reader) {
-    throw new Error('No readable stream available');
-  }
-
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    // Keep the last potentially incomplete line in the buffer
-    buffer = lines.pop() || '';
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed.startsWith('data: ')) continue;
-      const jsonStr = trimmed.slice(6);
-      if (!jsonStr) continue;
-      try {
-        const event: SSEEvent = JSON.parse(jsonStr);
-        onEvent(event);
-      } catch {
-        // Skip malformed events
-      }
-    }
-  }
-
-  // Process any remaining data in the buffer
-  if (buffer.trim().startsWith('data: ')) {
-    const jsonStr = buffer.trim().slice(6);
-    if (jsonStr) {
-      try {
-        const event: SSEEvent = JSON.parse(jsonStr);
-        onEvent(event);
-      } catch {
-        // Skip
-      }
-    }
-  }
 }

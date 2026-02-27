@@ -85,13 +85,11 @@ def _build_agent(system_prompt: str, chat_history: list[dict] | None = None) -> 
         raise AgentNotConfigured("GEMINI_API_KEY is not configured")
 
     yf_tools = YFinanceTools(
-        include_tools=[
-            "get_current_stock_price",
-            "get_company_info",
-            "get_company_news",
-            "get_stock_fundamentals",
-            "get_analyst_recommendations",
-        ],
+        enable_stock_price=True,
+        enable_company_info=True,
+        enable_company_news=True,
+        enable_stock_fundamentals=True,
+        enable_analyst_recommendations=True,
     )
 
     newspaper_tools = Newspaper4kTools(
