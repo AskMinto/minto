@@ -151,17 +151,21 @@ def _load_chat_context(supabase, user, chat_id: str):
         .select("role,content")
         .eq("chat_id", chat_id)
         .order("created_at", desc=True)
-        .limit(20)
+        .limit(10)
         .execute()
     ).data or []
     recent_history = list(reversed(recent_history))[:-1]
-    # Strip disclaimer text from old assistant messages so the model doesn't learn to repeat it
+    # Strip disclaimer text and truncate long messages to avoid context overload
     for msg in recent_history:
         if msg.get("role") == "assistant" and msg.get("content"):
             content = msg["content"]
             for pattern in _DISCLAIMER_PATTERNS:
                 content = content.replace(pattern, "")
-            msg["content"] = content.strip()
+            content = content.strip()
+            # Truncate long assistant messages to keep context lean
+            if len(content) > 500:
+                content = content[:500] + "..."
+            msg["content"] = content
 
     risk_profile = None
     try:
@@ -320,10 +324,10 @@ def send_message_stream(
                     full_content = event.get("content", "")
 
             # Apply guardrails to final content
+            logger.info("Before guardrails: content_len=%d, widgets=%d", len(full_content), len(widgets))
             if full_content:
                 full_content, widgets = _apply_guardrails(full_content, widgets)
-
-            logger.info(f"Stream done: content_len={len(full_content)}, widgets={len(widgets)}")
+            logger.info("After guardrails: content_len=%d, widgets=%d", len(full_content), len(widgets))
 
         except (AgentNotConfigured, GeminiNotConfigured):
             full_content = (
