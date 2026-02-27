@@ -103,7 +103,6 @@ export default function ChatScreen() {
     setMessages((prev) => [...prev, { role: 'assistant', content: '', metadata: {} }]);
 
     let streamedContent = '';
-    let streamWidgets: any[] = [];
 
     try {
       await apiStream('/chat/message/stream', { content }, (event: SSEEvent) => {
@@ -118,37 +117,10 @@ export default function ChatScreen() {
             }
             return updated;
           });
-        } else if (event.type === 'tool_completed' && event.widgets?.length) {
-          // Render widgets immediately as each tool finishes
-          streamWidgets = [...streamWidgets, ...event.widgets];
-          const currentWidgets = streamWidgets;
-          setMessages((prev) => {
-            const updated = [...prev];
-            const lastIdx = updated.length - 1;
-            if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
-              updated[lastIdx] = {
-                ...updated[lastIdx],
-                metadata: { widgets: currentWidgets },
-              };
-            }
-            return updated;
-          });
-        } else if (event.type === 'done') {
-          // Use server's final widget list, or fall back to what we collected from tool events
-          const finalWidgets = event.widgets?.length ? event.widgets : streamWidgets;
-          setMessages((prev) => {
-            const updated = [...prev];
-            const lastIdx = updated.length - 1;
-            if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
-              updated[lastIdx] = {
-                ...updated[lastIdx],
-                metadata: finalWidgets.length ? { widgets: finalWidgets } : {},
-              };
-            }
-            return updated;
-          });
         }
       });
+      // Stream finished — reload from server to get the persisted message with widgets
+      await loadMessages(false);
     } catch {
       setMessages((prev) => {
         const updated = [...prev];
