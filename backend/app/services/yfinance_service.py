@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from cachetools import TTLCache
@@ -7,9 +8,14 @@ import yfinance as yf
 
 from ..core.config import YFINANCE_MAX_RESULTS, YFINANCE_NEWS_COUNT
 
+# Suppress yfinance's noisy stderr output for invalid/delisted symbols
+logging.getLogger("yfinance").setLevel(logging.CRITICAL)
+
 _search_cache: TTLCache[str, dict] = TTLCache(maxsize=256, ttl=60)
 _news_cache: TTLCache[str, list] = TTLCache(maxsize=256, ttl=300)
-_quote_cache: TTLCache[str, dict] = TTLCache(maxsize=512, ttl=5)
+_quote_cache: TTLCache[str, dict] = TTLCache(maxsize=512, ttl=30)
+# Separate cache for symbols that fail lookup — longer TTL to avoid repeated noisy retries
+_failed_symbol_cache: TTLCache[str, bool] = TTLCache(maxsize=256, ttl=600)
 
 
 def _normalize_exchange(raw: str | None) -> str | None:
@@ -131,11 +137,17 @@ def get_quote(symbol: str | None, exchange: str | None) -> dict[str, Any]:
     cache_key = yahoo_symbol.upper()
     if cache_key in _quote_cache:
         return _quote_cache[cache_key]
+    if cache_key in _failed_symbol_cache:
+        return {}
 
+    import warnings
     try:
-        ticker = yf.Ticker(yahoo_symbol)
-        hist = ticker.history(period="5d", interval="1d")
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            ticker = yf.Ticker(yahoo_symbol)
+            hist = ticker.history(period="5d", interval="1d")
         if hist is None or hist.empty:
+            _failed_symbol_cache[cache_key] = True
             data = {}
         else:
             close_series = hist["Close"]

@@ -101,8 +101,10 @@ def _build_user_prompt(message: str, memory: str, portfolio: dict) -> str:
     holdings_lines = []
     for h in top_holdings[:10]:
         name = h.get("symbol") or h.get("scheme_name") or h.get("isin") or "Unknown"
+        qty = h.get("qty", 0)
+        invested = h.get("invested", 0)
         holdings_lines.append(
-            f"  {name}: ₹{h.get('value', 0):,.0f} ({h.get('pnl_pct', 0):.1f}%)"
+            f"  {name}: qty={qty}, invested=₹{invested:,.0f}, current_value=₹{h.get('value', 0):,.0f}, P&L={h.get('pnl_pct', 0):.1f}%"
         )
     holdings_block = "\n".join(holdings_lines) if holdings_lines else "  No holdings"
 
