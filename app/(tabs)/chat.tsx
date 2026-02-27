@@ -120,7 +120,17 @@ export default function ChatScreen() {
         }
       });
       // Stream finished — reload from server to get the persisted message with widgets
-      await loadMessages(false);
+      try {
+        const data = await apiGet<{ messages: any[] }>('/chat/messages');
+        const msgs = data.messages || [];
+        // Find widgets in the last assistant message
+        const lastAssistant = [...msgs].reverse().find((m: any) => m.role === 'assistant');
+        console.log('[Minto] reload: total messages=', msgs.length,
+          'last assistant metadata=', JSON.stringify(lastAssistant?.metadata));
+        setMessages(msgs);
+      } catch (reloadErr) {
+        console.log('[Minto] reload failed:', reloadErr);
+      }
     } catch {
       setMessages((prev) => {
         const updated = [...prev];

@@ -65,7 +65,15 @@ def get_messages(user: UserContext = Depends(get_user_context)):
         .order("created_at", desc=False)
         .execute()
     )
-    return {"chat_id": chat_id, "messages": messages.data or []}
+    # Log the last assistant message's metadata for debugging widget delivery
+    msgs = messages.data or []
+    for m in reversed(msgs):
+        if m.get("role") == "assistant":
+            meta = m.get("metadata", {})
+            widget_count = len(meta.get("widgets", []))
+            logger.info(f"GET /messages: last assistant metadata={meta}, widget_count={widget_count}")
+            break
+    return {"chat_id": chat_id, "messages": msgs}
 
 
 def _build_system_prompt(risk_profile: dict | None = None) -> str:
@@ -181,7 +189,7 @@ def _apply_guardrails(reply: str, widgets: list[dict]) -> tuple[str, list[dict]]
 
 def _save_assistant_message(supabase, chat_id: str, user_id: str, content: str, widgets: list[dict]):
     """Persist the assistant message and update chat timestamp."""
-    metadata = {"widgets": widgets} if widgets else {}
+    metadata = {"widgets": widgets} if widgets else {"widgets": []}
     supabase.table("chat_messages").insert(
         {
             "chat_id": chat_id,
@@ -292,11 +300,13 @@ def send_message_stream(
                     yield f"data: {data}\n\n"
 
                 elif event_type == "tool_started":
+                    logger.info(f"Tool started: {event.get('tool_name', '')}")
                     data = json.dumps({"type": "tool_started", "tool_name": event.get("tool_name", "")})
                     yield f"data: {data}\n\n"
 
                 elif event_type == "tool_completed":
                     tool_widgets = event.get("widgets", [])
+                    logger.info(f"Tool completed: {event.get('tool_name', '')}, widgets={len(tool_widgets)}")
                     if tool_widgets:
                         widgets.extend(tool_widgets)
                     data = json.dumps({
@@ -308,11 +318,12 @@ def send_message_stream(
 
                 elif event_type == "done":
                     full_content = event.get("content", "")
-                    # widgets already collected from tool_completed events
 
             # Apply guardrails to final content
             if full_content:
                 full_content, widgets = _apply_guardrails(full_content, widgets)
+
+            logger.info(f"Stream done: content_len={len(full_content)}, widgets={len(widgets)}")
 
         except (AgentNotConfigured, GeminiNotConfigured):
             full_content = (
@@ -329,6 +340,7 @@ def send_message_stream(
 
         # Save to DB BEFORE sending done — so loadMessages() on the client finds it
         if full_content:
+            logger.info(f"Saving message: widgets={len(widgets)}, metadata={{'widgets': widgets} if widgets else {}}")
             _save_assistant_message(supabase, chat_id, user.user_id, full_content, widgets)
             add_memory(user.user_id, f"User: {payload.content}\nAssistant: {full_content}")
 
