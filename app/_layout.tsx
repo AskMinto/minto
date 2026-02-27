@@ -128,14 +128,14 @@ function RootLayoutNav() {
     }
 
     if (onboardingState === 'complete' && !inTabsGroup && !inAppScreen) {
-      router.replace('/(tabs)/chat');
+      router.replace('/(tabs)/dashboard');
     }
   }, [session, initialized, segments, onboardingState]);
 
   return (
     <OnboardingContext.Provider value={{ recheckOnboarding: checkOnboarding }}>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#f5f0e8' } }}>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: '#1C211E' } }}>
           <Stack.Screen name="index" />
           <Stack.Screen name="login" options={{ presentation: 'modal' }} />
           <Stack.Screen name="(onboarding)" />

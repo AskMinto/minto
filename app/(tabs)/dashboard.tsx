@@ -77,7 +77,7 @@ function formatPct(value: number) {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
 }
 
-export function DashboardContent() {
+export default function DashboardScreen() {
   const router = useRouter();
   const [dashboard, setDashboard] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -134,7 +134,8 @@ export function DashboardContent() {
   );
 
   return (
-    <ScrollView contentContainerStyle={styles.scrollContent}>
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <View>
             <Text style={styles.greetingText}>Portfolio</Text>
@@ -323,14 +324,7 @@ export function DashboardContent() {
             ))}
           </>
         )}
-    </ScrollView>
-  );
-}
-
-export default function DashboardScreen() {
-  return (
-    <SafeAreaView style={styles.container}>
-      <DashboardContent />
+      </ScrollView>
     </SafeAreaView>
   );
 }
