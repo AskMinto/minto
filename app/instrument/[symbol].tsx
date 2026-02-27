@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, Pressable, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, TrendingUp, TrendingDown, Plus } from 'lucide-react-native';
 import Svg, { Path, Line } from 'react-native-svg';
 import { useLocalSearchParams, useRouter } from 'expo-router';

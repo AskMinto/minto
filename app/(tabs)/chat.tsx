@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Linking } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable, ScrollView, KeyboardAvoidingView, Platform, Linking } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Send, MessageCircle, TrendingUp, Newspaper } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { apiGet, apiPost } from '../../lib/api';

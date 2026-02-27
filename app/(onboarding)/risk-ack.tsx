@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { SafeAreaView, ScrollView, StyleSheet, Text, View, Pressable, ActivityIndicator } from 'react-native';
+import { ScrollView, StyleSheet, Text, View, Pressable, ActivityIndicator } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { ShieldAlert } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { supabase } from '../../lib/supabase';

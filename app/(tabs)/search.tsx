@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TextInput,
   ScrollView,
   Pressable,
@@ -12,6 +11,7 @@ import {
   Dimensions,
   Linking,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search as SearchIcon, TrendingUp, TrendingDown, Building2, X, Newspaper } from 'lucide-react-native';
 import Svg, { Path, Line } from 'react-native-svg';
 import { apiGet } from '../../lib/api';

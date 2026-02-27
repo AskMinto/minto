@@ -140,7 +140,6 @@ function RootLayoutNav() {
           <Stack.Screen name="login" options={{ presentation: 'modal' }} />
           <Stack.Screen name="(onboarding)" />
           <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="chat/[id]" />
         </Stack>
       </ThemeProvider>
     </OnboardingContext.Provider>
