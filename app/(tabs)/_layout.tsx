@@ -1,44 +1,18 @@
-import React from 'react';
-import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Pressable, Platform, Animated, Easing } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { LayoutDashboard, Search, User, ChevronUp, Mic, Sparkles } from 'lucide-react-native';
 import { Theme } from '../../constants/Theme';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// Use a custom C icon representing the Ask Minto tab
-function CustomCIcon({ color, size }: { color: string, size: number }) {
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <Text style={{ fontFamily: Theme.font.familyBold, fontSize: size * 0.7, color: color, includeFontPadding: false }}>C</Text>
-    </View>
-  );
-}
+const TOP_SECTION_HEIGHT = 98;
 
-// Arrow icon for Spend
-function SpendArrowIcon({ color, size }: { color: string, size: number }) {
+// Use a custom M icon representing the Ask Minto tab
+function CustomMIcon({ color, size }: { color: string, size: number }) {
   return (
     <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-       {/* Drawing an arrow manually to match Cleo style */}
-       <Text style={{ fontFamily: Theme.font.familyMedium, fontSize: size * 0.8, color: color, includeFontPadding: false }}>↗</Text>
-    </View>
-  );
-}
-
-// Arrow icon for Save
-function SaveArrowIcon({ color, size }: { color: string, size: number }) {
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-       <Text style={{ fontFamily: Theme.font.familyMedium, fontSize: size * 0.8, color: color, includeFontPadding: false }}>↙</Text>
-    </View>
-  );
-}
-
-// Dollar icon for Request
-function DollarIcon({ color, size }: { color: string, size: number }) {
-  return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-       <Text style={{ fontFamily: Theme.font.familyMedium, fontSize: size * 0.8, color: color, includeFontPadding: false }}>$</Text>
+      <Text style={{ fontFamily: Theme.font.familyBold, fontSize: size * 0.65, color: color, includeFontPadding: false }}>M</Text>
     </View>
   );
 }
@@ -46,21 +20,52 @@ function DollarIcon({ color, size }: { color: string, size: number }) {
 function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  
+  const isHome = state.routes[state.index].name === 'index';
+  const expandAnim = useRef(new Animated.Value(isHome ? 1 : 0)).current;
+
+  useEffect(() => {
+    Animated.timing(expandAnim, {
+      toValue: isHome ? 1 : 0,
+      duration: 280,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [isHome, expandAnim]);
+
+  const topHeight = expandAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, TOP_SECTION_HEIGHT],
+  });
+
+  const topOpacity = expandAnim.interpolate({
+    inputRange: [0, 0.6, 1],
+    outputRange: [0, 0, 1],
+  });
 
   return (
     <View style={[styles.tabBarWrapper, { paddingBottom: Math.max(insets.bottom, 16) }]}>
-      <ChevronUp color="rgba(0,0,0,0.15)" size={24} style={styles.dragHandle} />
+      
+      {/* Animated Top Section: Chevron + Input Row */}
+      <Animated.View 
+        style={{ 
+          height: topHeight,
+          opacity: topOpacity,
+          overflow: 'hidden',
+        }}
+      >
+        <ChevronUp color="rgba(0,0,0,0.15)" size={24} style={styles.dragHandle} />
 
-      {/* Input Row */}
-      <View style={styles.inputRow}>
-        <Pressable style={styles.chatInputBubble} onPress={() => router.push('/chat')}>
-          <Text style={styles.chatInputPlaceholder}>Ask me anything...</Text>
-        </Pressable>
-        <Pressable style={styles.micButton}>
-          <Mic color={Theme.colors.textPrimary} size={22} />
-          <Sparkles color={Theme.colors.textPrimary} size={10} style={styles.sparkleIcon} />
-        </Pressable>
-      </View>
+        <View style={styles.inputRow}>
+          <Pressable style={styles.chatInputBubble} onPress={() => router.push('/chat')}>
+            <Text style={styles.chatInputPlaceholder}>Ask me anything...</Text>
+          </Pressable>
+          <Pressable style={styles.micButton}>
+            <Mic color={Theme.colors.textPrimary} size={22} />
+            <Sparkles color={Theme.colors.textPrimary} size={10} style={styles.sparkleIcon} />
+          </Pressable>
+        </View>
+      </Animated.View>
 
       {/* Tabs Row */}
       <View style={styles.tabsRow}>
@@ -81,21 +86,21 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
             }
           };
 
-          let IconComponent: any = SpendArrowIcon; // default
+          let IconComponent: any = LayoutDashboard;
           let displayLabel = label as string;
 
           if (route.name === 'index') {
-            IconComponent = CustomCIcon;
-            displayLabel = 'Ask Cleo'; // Matching reference image
+            IconComponent = CustomMIcon;
+            displayLabel = 'Ask Minto';
           } else if (route.name === 'dashboard') {
-            IconComponent = SpendArrowIcon;
-            displayLabel = 'Spend';
+            IconComponent = LayoutDashboard;
+            displayLabel = 'Portfolio';
           } else if (route.name === 'search') {
-            IconComponent = SaveArrowIcon;
-            displayLabel = 'Save';
+            IconComponent = Search;
+            displayLabel = 'Search';
           } else if (route.name === 'profile') {
-            IconComponent = DollarIcon;
-            displayLabel = 'Request';
+            IconComponent = User;
+            displayLabel = 'Profile';
           }
 
           return (
@@ -105,7 +110,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
               style={styles.tabButton}
             >
               <View style={[styles.iconWrap, isFocused && styles.iconWrapActive]}>
-                <IconComponent color={isFocused ? Theme.colors.white : '#4a3d3c'} size={20} />
+                <IconComponent color={isFocused ? Theme.colors.white : Theme.colors.accent} size={20} />
               </View>
               <Text style={[styles.tabLabel, isFocused && styles.tabLabelActive]}>
                 {displayLabel}
@@ -128,20 +133,20 @@ export default function TabLayout() {
       }}
     >
       <Tabs.Screen
-        name="dashboard"
-        options={{ title: 'Spend' }}
+        name="index"
+        options={{ title: 'Ask Minto' }}
       />
       <Tabs.Screen
-        name="index"
-        options={{ title: 'Ask Cleo' }}
+        name="dashboard"
+        options={{ title: 'Portfolio' }}
       />
       <Tabs.Screen
         name="search"
-        options={{ title: 'Save' }}
+        options={{ title: 'Search' }}
       />
       <Tabs.Screen
         name="profile"
-        options={{ title: 'Request' }}
+        options={{ title: 'Profile' }}
       />
     </Tabs>
   );
@@ -153,7 +158,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: 'rgba(252, 245, 239, 0.85)', // A warm off-white/beige glass effect
+    backgroundColor: 'rgba(240, 245, 239, 0.85)',
     borderTopLeftRadius: 36,
     borderTopRightRadius: 36,
     paddingHorizontal: 20,
@@ -188,7 +193,7 @@ const styles = StyleSheet.create({
   },
   chatInputPlaceholder: {
     fontFamily: Theme.font.family,
-    color: '#8c8585', // Warm gray
+    color: Theme.colors.textMuted,
     fontSize: 16,
   },
   micButton: {
@@ -222,20 +227,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
     borderWidth: 1.5,
-    borderColor: '#4a3d3c', // Dark brownish grey
+    borderColor: Theme.colors.accent,
     backgroundColor: 'transparent',
   },
   iconWrapActive: {
-    backgroundColor: '#4a3d3c',
-    borderColor: '#4a3d3c',
+    backgroundColor: Theme.colors.accent,
+    borderColor: Theme.colors.accent,
   },
   tabLabel: {
     fontFamily: Theme.font.familyMedium,
     fontSize: 11,
-    color: '#8c8585',
+    color: Theme.colors.textMuted,
   },
   tabLabelActive: {
-    color: '#4a3d3c',
+    color: Theme.colors.accent,
     fontFamily: Theme.font.familyBold,
   },
 });
