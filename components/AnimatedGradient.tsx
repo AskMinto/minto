@@ -2,10 +2,11 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
+// Center hue made more distinct/darker to make the glass effect pop
 const COLOR_SETS = [
-  ['#c8d5c0', '#b5c9a8', '#d4dcc8'],
-  ['#b5c9a8', '#d4dcc8', '#c8d5c0'],
-  ['#d4dcc8', '#c8d5c0', '#b5c9a8'],
+  ['#f0f4ef', '#9ebf9c', '#eaf0e8'],
+  ['#eaf0e8', '#8cac8a', '#f0f4ef'],
+  ['#f0f4ef', '#7b9f7a', '#eaf0e8'],
 ];
 
 const AnimatedLinearGradient = Animated.createAnimatedComponent(LinearGradient);
@@ -22,7 +23,7 @@ export default function AnimatedGradient({ children, style }: AnimatedGradientPr
     const loop = Animated.loop(
       Animated.timing(progress, {
         toValue: 2,
-        duration: 14000,
+        duration: 12000,
         useNativeDriver: false,
       }),
     );
@@ -48,8 +49,9 @@ export default function AnimatedGradient({ children, style }: AnimatedGradientPr
   return (
     <AnimatedLinearGradient
       colors={[color0, color1, color2] as any}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
+      start={{ x: 0.1, y: 0.1 }}
+      end={{ x: 0.9, y: 0.9 }}
+      locations={[0, 0.45, 1]}
       style={[styles.gradient, style]}
     >
       {children}
