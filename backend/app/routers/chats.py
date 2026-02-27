@@ -340,7 +340,7 @@ def send_message_stream(
 
         # Save to DB BEFORE sending done — so loadMessages() on the client finds it
         if full_content:
-            logger.info(f"Saving message: widgets={len(widgets)}, metadata={{'widgets': widgets} if widgets else {}}")
+            logger.info("Saving message: widgets=%d", len(widgets))
             _save_assistant_message(supabase, chat_id, user.user_id, full_content, widgets)
             add_memory(user.user_id, f"User: {payload.content}\nAssistant: {full_content}")
 
