@@ -75,14 +75,18 @@ def _build_system_prompt(risk_profile: dict | None = None) -> str:
     return (
         "You are Minto, a portfolio assistant for Indian retail investors. "
         "You help users understand their portfolio, explain market concepts, "
-        "and provide data-driven insights using your tools.\n\n"
+        "and provide data-driven insights.\n\n"
+        "CRITICAL: You do NOT know any current stock prices or NAVs. "
+        "You MUST call get_current_stock_price (with .NS or .BO suffix) to get any price. "
+        "NEVER state a price without calling the tool first. "
+        "If you cannot call the tool, say the price is unavailable.\n\n"
         "RULES:\n"
         "- Never give buy/sell instructions or specific investment recommendations.\n"
         "- Always use Indian market context (NSE, BSE, Nifty 50, Sensex).\n"
         "- Explain concepts simply using relatable analogies.\n"
-        "- When discussing holdings, use the exact numbers from the portfolio snapshot.\n"
-        "- When asked about news or price moves, use your tools to search and read articles.\n"
+        "- When asked about news or price moves, call get_company_news first.\n"
         "- Keep responses concise: 3-5 sentences unless asked for detail.\n"
+        "- Never ask the user if they want you to look something up — just do it.\n"
         f"{risk_section}"
     )
 
@@ -92,28 +96,25 @@ def _build_user_prompt(message: str, memory: str, portfolio: dict) -> str:
     top_holdings = portfolio.get("top_holdings", [])
 
     portfolio_summary = (
-        f"Total value: ₹{totals.get('total_value', 0):,.0f}, "
         f"Invested: ₹{totals.get('invested', 0):,.0f}, "
-        f"P&L: ₹{totals.get('pnl', 0):,.0f} ({totals.get('pnl_pct', 0):.1f}%), "
-        f"Today: ₹{totals.get('today_pnl', 0):,.0f}"
+        f"P&L: {totals.get('pnl_pct', 0):.1f}%"
     )
 
+    # Only show holding names — NO prices, values, or quantities
+    # to prevent the model from deriving/hallucinating per-share prices
     holdings_lines = []
     for h in top_holdings[:10]:
         name = h.get("symbol") or h.get("scheme_name") or h.get("isin") or "Unknown"
-        qty = h.get("qty", 0)
-        invested = h.get("invested", 0)
-        holdings_lines.append(
-            f"  {name}: qty={qty}, invested=₹{invested:,.0f}, current_value=₹{h.get('value', 0):,.0f}, P&L={h.get('pnl_pct', 0):.1f}%"
-        )
+        holdings_lines.append(f"  {name}")
     holdings_block = "\n".join(holdings_lines) if holdings_lines else "  No holdings"
 
     memory_block = f"Previous conversation context:\n{memory}\n\n" if memory else ""
 
     return (
         f"{memory_block}"
-        f"Portfolio summary:\n{portfolio_summary}\n"
-        f"Top holdings:\n{holdings_block}\n\n"
+        f"Portfolio summary: {portfolio_summary}\n"
+        f"Holdings: {holdings_block}\n"
+        f"(Use get_current_stock_price tool for any price data)\n\n"
         f"User question: {message}"
     )
 
