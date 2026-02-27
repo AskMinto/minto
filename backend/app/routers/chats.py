@@ -10,6 +10,12 @@ from pydantic import BaseModel
 
 from ..core.auth import UserContext, get_user_context
 from ..core.config import ASSISTANT_DISCLAIMER
+
+# Disclaimer text to strip from chat history so the model doesn't learn to repeat it
+_DISCLAIMER_PATTERNS = [
+    "Minto provides informational insights, not investment advice.",
+    "Consider consulting a SEBI-registered advisor before making decisions.",
+]
 from ..db.supabase import get_supabase_client
 from ..services.gemini import generate_response, GeminiNotConfigured
 from ..services.guardrails import append_disclaimer, contains_blocked_phrase, safe_response
@@ -87,6 +93,8 @@ def _build_system_prompt(risk_profile: dict | None = None) -> str:
         "- When asked about news or price moves, call get_company_news first.\n"
         "- Keep responses concise: 3-5 sentences unless asked for detail.\n"
         "- Never ask the user if they want you to look something up — just do it.\n"
+        "- NEVER add disclaimers, legal notices, or 'consult a financial advisor' messages. "
+        "The app already shows a disclaimer banner.\n"
         f"{risk_section}"
     )
 
@@ -139,6 +147,13 @@ def _load_chat_context(supabase, user, chat_id: str):
         .execute()
     ).data or []
     recent_history = list(reversed(recent_history))[:-1]
+    # Strip disclaimer text from old assistant messages so the model doesn't learn to repeat it
+    for msg in recent_history:
+        if msg.get("role") == "assistant" and msg.get("content"):
+            content = msg["content"]
+            for pattern in _DISCLAIMER_PATTERNS:
+                content = content.replace(pattern, "")
+            msg["content"] = content.strip()
 
     risk_profile = None
     try:
