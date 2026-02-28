@@ -3,10 +3,13 @@ from __future__ import annotations
 from tempfile import NamedTemporaryFile
 from typing import Any
 
-import pdfplumber
-
 from .yfinance_service import map_isin_to_ticker
 from .mfapi_service import resolve_isin_to_scheme, get_latest_nav
+
+try:
+    import pdfplumber
+except Exception:  # pragma: no cover - optional dependency handling
+    pdfplumber = None
 try:
     import casparser
 except Exception:  # pragma: no cover - optional dependency handling
@@ -73,7 +76,7 @@ def parse_cas_pdf(pdf_bytes: bytes) -> dict[str, Any]:
             records = _flatten_records(raw)
             holdings = _normalize_records(records)
 
-        if not holdings:
+        if not holdings and pdfplumber:
             try:
                 with pdfplumber.open(tmp.name) as pdf:
                     text = "\n".join(page.extract_text() or "" for page in pdf.pages)
