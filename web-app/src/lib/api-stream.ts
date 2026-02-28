@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+
 export interface SSEEvent {
   type: "token" | "tool_started" | "tool_completed" | "done";
   content?: string;
@@ -18,7 +20,7 @@ export async function apiStream(
   } = await supabase.auth.getSession();
   const token = session?.access_token;
 
-  const response = await fetch(`/api${path}`, {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

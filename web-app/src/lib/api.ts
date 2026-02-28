@@ -1,5 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+
 async function getAccessToken(): Promise<string | null> {
   const supabase = createClient();
   const {
@@ -25,7 +27,7 @@ async function apiFetch(path: string, options: RequestInit = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`/api${path}`, { ...options, headers });
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
 
   if (!response.ok) {
     const message = await response.text();
