@@ -493,6 +493,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.colors.cardBg,
     borderRadius: 18,
     padding: 16,
+    marginBottom: 100,
   },
   newsSectionTitle: {
     fontFamily: Theme.font.familyBold,

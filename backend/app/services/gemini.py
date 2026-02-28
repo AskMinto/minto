@@ -15,7 +15,7 @@ def generate_response(system_prompt: str, user_prompt: str) -> str:
         raise GeminiNotConfigured("GEMINI_API_KEY is not configured")
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(
-        model_name="gemini-2.0-flash",
+        model_name="gemini-3-flash-preview",
         system_instruction=system_prompt,
     )
     result = model.generate_content(user_prompt)

@@ -578,7 +578,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.colors.cardBg,
     borderRadius: Theme.radius.card,
     padding: 14,
-    marginBottom: 12,
+    marginBottom: 120,
   },
   chartCenter: {
     alignItems: 'center',

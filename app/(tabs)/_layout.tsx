@@ -12,7 +12,7 @@ const mintoIcon = require('../../assets/images/minto.png');
 
 function MintoIcon({ size }: { color: string, size: number }) {
   return (
-    <Image source={mintoIcon} style={{ width: size+20, height: size+20, resizeMode: 'contain' }} />
+    <Image source={mintoIcon} style={{ width: size+17.5, height: size+17.5, resizeMode: 'contain' }} />
   );
 }
 
