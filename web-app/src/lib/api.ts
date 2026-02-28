@@ -13,6 +13,7 @@ async function getAccessToken(): Promise<string | null> {
 async function apiFetch(path: string, options: RequestInit = {}) {
   const token = await getAccessToken();
   const headers: Record<string, string> = {
+    "ngrok-skip-browser-warning": "true",
     ...(options.headers as Record<string, string>),
   };
 
