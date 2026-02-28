@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, Pressable, Platform, Animated, Easing } from 'react-native';
+import { View, Text, Image, StyleSheet, Pressable, Platform, Animated, Easing } from 'react-native';
 import { Tabs, useRouter } from 'expo-router';
 import { LayoutDashboard, Search, User, ChevronUp, Mic, Sparkles } from 'lucide-react-native';
 import { Theme } from '../../constants/Theme';
@@ -8,12 +8,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const TOP_SECTION_HEIGHT = 98;
 
-// Use a custom M icon representing the Ask Minto tab
-function CustomMIcon({ color, size }: { color: string, size: number }) {
+const mintoIcon = require('../../assets/images/minto.png');
+
+function MintoIcon({ size }: { color: string, size: number }) {
   return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
-      <Text style={{ fontFamily: Theme.font.familyBold, fontSize: size * 0.65, color: color, includeFontPadding: false }}>M</Text>
-    </View>
+    <Image source={mintoIcon} style={{ width: size, height: size, resizeMode: 'contain' }} />
   );
 }
 
@@ -90,7 +89,7 @@ function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
           let displayLabel = label as string;
 
           if (route.name === 'index') {
-            IconComponent = CustomMIcon;
+            IconComponent = MintoIcon;
             displayLabel = 'Ask Minto';
           } else if (route.name === 'dashboard') {
             IconComponent = LayoutDashboard;
