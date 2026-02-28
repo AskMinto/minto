@@ -8,6 +8,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Theme } from '../../constants/Theme';
 import { supabase } from '../../lib/supabase';
 import AnimatedGradient from '../../components/AnimatedGradient';
+import Markdown from 'react-native-markdown-display';
 
 function PriceSummaryWidget({ data, onPress }: { data: any; onPress: () => void }) {
   const items = data.items || [];
@@ -267,7 +268,7 @@ export default function ChatScreen() {
                         {isEmptyAssistant ? (
                           <Text style={styles.typingText}>Thinking...</Text>
                         ) : (
-                          <Text style={styles.botText}>{message.content}</Text>
+                          <Markdown style={markdownStyles}>{message.content}</Markdown>
                         )}
                       </View>
                     </View>
@@ -347,6 +348,89 @@ export default function ChatScreen() {
     </AnimatedGradient>
   );
 }
+
+const markdownStyles: Record<string, any> = {
+  body: {
+    fontFamily: Theme.font.family,
+    color: Theme.colors.textPrimary,
+    fontSize: 18,
+    lineHeight: 28,
+  },
+  strong: {
+    fontFamily: Theme.font.familyBold,
+    fontWeight: undefined as any,
+  },
+  em: {
+    fontFamily: Theme.font.family,
+    fontStyle: 'italic' as const,
+  },
+  bullet_list: {
+    marginVertical: 4,
+  },
+  ordered_list: {
+    marginVertical: 4,
+  },
+  list_item: {
+    marginVertical: 2,
+  },
+  paragraph: {
+    marginTop: 0,
+    marginBottom: 8,
+  },
+  heading1: {
+    fontFamily: Theme.font.familyBold,
+    fontSize: 22,
+    lineHeight: 30,
+    color: Theme.colors.textPrimary,
+    marginTop: 8,
+    marginBottom: 4,
+    fontWeight: undefined as any,
+  },
+  heading2: {
+    fontFamily: Theme.font.familyBold,
+    fontSize: 20,
+    lineHeight: 28,
+    color: Theme.colors.textPrimary,
+    marginTop: 8,
+    marginBottom: 4,
+    fontWeight: undefined as any,
+  },
+  heading3: {
+    fontFamily: Theme.font.familyBold,
+    fontSize: 18,
+    lineHeight: 26,
+    color: Theme.colors.textPrimary,
+    marginTop: 6,
+    marginBottom: 4,
+    fontWeight: undefined as any,
+  },
+  code_inline: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    borderRadius: 4,
+    paddingHorizontal: 4,
+    fontSize: 15,
+  },
+  fence: {
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    marginVertical: 8,
+  },
+  link: {
+    color: Theme.colors.accent,
+    textDecorationLine: 'underline' as const,
+  },
+  blockquote: {
+    borderLeftWidth: 3,
+    borderLeftColor: Theme.colors.accent,
+    paddingLeft: 12,
+    marginVertical: 8,
+    opacity: 0.85,
+  },
+};
 
 const styles = StyleSheet.create({
   container: {
