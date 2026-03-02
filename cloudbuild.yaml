@@ -29,3 +29,5 @@ steps:
 
 images:
   - gcr.io/$PROJECT_ID/minto-api:$COMMIT_SHA
+options:
+  logging: CLOUD_LOGGING_ONLY
