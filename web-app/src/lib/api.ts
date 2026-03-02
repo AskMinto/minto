@@ -1,6 +1,11 @@
 import { createClient } from "@/lib/supabase/client";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+// In the browser we route through Next.js rewrites to avoid CORS.
+// On the server (SSR) we can call the backend directly.
+const API_BASE_URL =
+  typeof window !== "undefined"
+    ? "/api/proxy"                                         // browser → same-origin rewrite
+    : process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000"; // server → direct
 
 async function getAccessToken(): Promise<string | null> {
   const supabase = createClient();
