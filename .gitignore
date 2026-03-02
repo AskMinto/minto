@@ -29,7 +29,7 @@ yarn-error.*
 # macOS
 .DS_Store
 *.pem
-
+cloudbuild.yaml
 # local env files
 .env*.local
 web-app/.env.local
