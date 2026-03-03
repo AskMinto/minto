@@ -11,8 +11,10 @@ from ..services.kite_service import (
     exchange_token,
     fetch_holdings,
     fetch_mf_holdings,
+    fetch_positions,
     map_kite_holdings,
     map_kite_mf_holdings,
+    map_kite_positions,
 )
 
 router = APIRouter(prefix="/zerodha", tags=["zerodha"])
@@ -99,9 +101,18 @@ def callback(payload: CallbackPayload, user: UserContext = Depends(get_user_cont
             detail="Failed to fetch mutual fund holdings from Zerodha",
         )
 
+    try:
+        raw_positions = fetch_positions(access_token)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch positions from Zerodha",
+        )
+
     mapped = map_kite_holdings(raw_holdings)
     mapped_mf = map_kite_mf_holdings(raw_mf_holdings)
-    combined = mapped + mapped_mf
+    mapped_positions = map_kite_positions(raw_positions)
+    combined = mapped + mapped_mf + mapped_positions
     supabase = get_supabase_client(user.token)
 
     # Delete existing Zerodha-sourced holdings before re-importing
@@ -112,7 +123,13 @@ def callback(payload: CallbackPayload, user: UserContext = Depends(get_user_cont
         qty = h.get("qty")
         if not qty:
             continue
-        if not (h.get("symbol") or h.get("isin") or h.get("scheme_name") or h.get("scheme_code")):
+        if not (
+            h.get("symbol")
+            or h.get("isin")
+            or h.get("scheme_name")
+            or h.get("scheme_code")
+            or h.get("instrument_id")
+        ):
             continue
         row = {
             "user_id": user.user_id,
@@ -120,6 +137,7 @@ def callback(payload: CallbackPayload, user: UserContext = Depends(get_user_cont
             "symbol": h.get("symbol"),
             "exchange": h.get("exchange"),
             "isin": h.get("isin"),
+            "instrument_id": h.get("instrument_id"),
             "qty": h["qty"],
             "avg_cost": h.get("avg_cost"),
             "asset_type": h.get("asset_type", "equity"),

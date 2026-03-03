@@ -66,6 +66,21 @@ def fetch_mf_holdings(access_token: str) -> list[dict[str, Any]]:
     return data.get("data", [])
 
 
+def fetch_positions(access_token: str) -> list[dict[str, Any]]:
+    """Fetch the user's net positions from Kite Connect."""
+    headers = {
+        "X-Kite-Version": "3",
+        "Authorization": f"token {KITE_API_KEY}:{access_token}",
+    }
+    with httpx.Client(timeout=15) as client:
+        resp = client.get(f"{KITE_BASE_URL}/portfolio/positions", headers=headers)
+        resp.raise_for_status()
+        data = resp.json()
+
+    payload = data.get("data", {}) if isinstance(data, dict) else {}
+    return payload.get("net", []) if isinstance(payload, dict) else []
+
+
 def map_kite_holdings(raw_holdings: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Map Kite Connect holding fields to the Minto holdings schema."""
     mapped = []
@@ -105,4 +120,30 @@ def map_kite_mf_holdings(raw_holdings: list[dict[str, Any]]) -> list[dict[str, A
                     entry["fund_house"] = nav_info["fund_house"]
 
         mapped.append(entry)
+    return mapped
+
+
+def map_kite_positions(raw_positions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Map Kite Connect positions to the Minto holdings schema."""
+    mapped = []
+    for p in raw_positions:
+        multiplier = p.get("multiplier") or 1
+        try:
+            multiplier_val = float(multiplier)
+        except (TypeError, ValueError):
+            multiplier_val = 1.0
+        avg_price = p.get("average_price", 0)
+        try:
+            avg_cost = float(avg_price) * multiplier_val
+        except (TypeError, ValueError):
+            avg_cost = 0
+
+        mapped.append({
+            "symbol": p.get("tradingsymbol"),
+            "exchange": p.get("exchange"),
+            "instrument_id": str(p.get("instrument_token")) if p.get("instrument_token") is not None else None,
+            "qty": p.get("quantity", 0),
+            "avg_cost": avg_cost,
+            "asset_type": "position",
+        })
     return mapped
