@@ -56,7 +56,7 @@ export default function RiskQuizPage() {
       const level = score <= 5 ? "low" : score <= 7 ? "medium" : "high";
       await apiPost("/risk/quiz", { answers, score, level });
       await recheckOnboarding();
-      router.push("/chat");
+      router.push("/onboarding/financial-profile");
     } catch (err: unknown) {
       setError(
         err instanceof Error ? err.message : "Unable to save risk profile"

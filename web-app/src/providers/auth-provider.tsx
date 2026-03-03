@@ -10,7 +10,12 @@ import {
 import { Session, User } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 
-type OnboardingState = "loading" | "needsAck" | "needsQuiz" | "complete";
+type OnboardingState =
+  | "loading"
+  | "needsAck"
+  | "needsQuiz"
+  | "needsProfile"
+  | "complete";
 
 interface AuthContextValue {
   session: Session | null;
@@ -80,6 +85,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!profileData || profileData.length === 0) {
         setOnboardingState("needsQuiz");
+        return;
+      }
+
+      const { data: finData } = await supabase
+        .from("financial_profiles")
+        .select("id")
+        .eq("user_id", userId)
+        .limit(1);
+
+      if (!finData || finData.length === 0) {
+        setOnboardingState("needsProfile");
         return;
       }
 

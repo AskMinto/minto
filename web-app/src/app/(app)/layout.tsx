@@ -20,6 +20,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       router.replace("/onboarding/risk-ack");
     } else if (onboardingState === "needsQuiz") {
       router.replace("/onboarding/risk-quiz");
+    } else if (onboardingState === "needsProfile") {
+      router.replace("/onboarding/financial-profile");
     }
   }, [session, loading, onboardingState, router]);
 
