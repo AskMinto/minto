@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Spinner } from "@/components/ui/spinner";
 import { formatCurrency, formatPct } from "@/lib/format";
+import { classifyFund, fundTypeLabel, fundTypeVariant } from "@/lib/fund-classifier";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 
 export default function HoldingsPage() {
@@ -70,6 +71,7 @@ export default function HoldingsPage() {
               <tbody>
                 {holdings.map((h) => {
                   const isMF = !!h.scheme_code;
+                  const fundType = isMF ? classifyFund({ schemeName: h.scheme_name }) : null;
                   const pnlColor = (h.pnl_pct || 0) >= 0 ? "text-minto-positive" : "text-minto-negative";
                   return (
                     <tr key={h.id} className="border-b border-black/5 last:border-0 hover:bg-black/[0.02] transition-colors">
@@ -77,7 +79,14 @@ export default function HoldingsPage() {
                         {h.symbol || h.scheme_name || h.isin || "Holding"}
                       </td>
                       <td className="px-3 py-3">
-                        <Badge variant={isMF ? "mf" : "equity"}>{isMF ? "MF" : "Equity"}</Badge>
+                        <div className="flex items-center gap-2">
+                          <Badge variant={isMF ? "mf" : "equity"}>{isMF ? "MF" : "Equity"}</Badge>
+                          {fundType ? (
+                            <Badge variant={fundTypeVariant(fundType)}>
+                              {fundTypeLabel(fundType)}
+                            </Badge>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-right text-minto-text">{h.qty}</td>
                       <td className="px-3 py-3 text-right text-minto-text-muted">

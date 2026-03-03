@@ -6,6 +6,7 @@ import { formatPrice } from "@/lib/format";
 import { Spinner } from "@/components/ui/spinner";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { classifyFund, fundTypeLabel, fundTypeVariant } from "@/lib/fund-classifier";
 import { X, TrendingUp, TrendingDown, ExternalLink } from "lucide-react";
 import {
   LineChart,
@@ -24,6 +25,7 @@ export function InstrumentDetail({ item, onClose }: Props) {
   const [loading, setLoading] = useState(true);
 
   const isMF = item.type === "MUTUAL_FUND";
+  const isETF = !isMF && /etf/i.test(String(detail?.name || item.name || item.symbol || ""));
 
   useEffect(() => {
     const load = async () => {
@@ -50,6 +52,14 @@ export function InstrumentDetail({ item, onClose }: Props) {
   const changeColor = isUp ? "text-minto-positive" : "text-minto-negative";
   const ChangeIcon = isUp ? TrendingUp : TrendingDown;
 
+  const fundType = classifyFund({
+    schemeCategory: detail?.scheme_category as string | undefined,
+    schemeType: detail?.scheme_type as string | undefined,
+    schemeName: detail?.scheme_name as string | undefined,
+    name: (detail?.name as string | undefined) || (item.name as string | undefined),
+    symbol: item.symbol as string | undefined,
+  });
+
   return (
     <div className="fixed inset-y-0 right-0 w-full max-w-md bg-[#f2f5ef] shadow-2xl z-40 flex flex-col">
       {/* Header */}
@@ -69,10 +79,17 @@ export function InstrumentDetail({ item, onClose }: Props) {
 
         {!loading && detail && !isMF && (
           <>
-            <p className="text-xs text-minto-text-muted mb-2">
-              {(detail.exchange || "") as string}
-              {detail.sector ? ` · ${detail.sector}` : ""}
-            </p>
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <p className="text-xs text-minto-text-muted">
+                {(detail.exchange || "") as string}
+                {detail.sector ? ` · ${detail.sector}` : ""}
+              </p>
+              {isETF && fundType ? (
+                <Badge variant={fundTypeVariant(fundType)}>
+                  {fundTypeLabel(fundType)}
+                </Badge>
+              ) : null}
+            </div>
             <div className="flex items-center gap-3 mb-4">
               <span className="text-2xl font-bold text-minto-text">
                 {formatPrice(detail.price as number)}
@@ -117,9 +134,16 @@ export function InstrumentDetail({ item, onClose }: Props) {
         {!loading && detail && isMF && (
           <>
             <p className="text-xs text-minto-text-muted mb-1">{(detail.fund_house || "") as string}</p>
-            {detail.scheme_category ? (
-              <Badge variant="mf" className="mb-3">{detail.scheme_category as string}</Badge>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              {fundType ? (
+                <Badge variant={fundTypeVariant(fundType)}>
+                  {fundTypeLabel(fundType)}
+                </Badge>
+              ) : null}
+              {detail.scheme_category ? (
+                <Badge variant="mf">{detail.scheme_category as string}</Badge>
+              ) : null}
+            </div>
             <div className="flex items-baseline gap-2 mb-4">
               <span className="text-2xl font-bold text-minto-text">
                 ₹{(detail.nav as number)?.toFixed(4) ?? "—"}
