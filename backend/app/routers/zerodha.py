@@ -78,6 +78,7 @@ def callback(payload: CallbackPayload, user: UserContext = Depends(get_user_cont
 
     try:
         raw_holdings = fetch_holdings(access_token)
+        print(raw_holdings)
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
