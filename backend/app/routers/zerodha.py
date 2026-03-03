@@ -6,7 +6,14 @@ from pydantic import BaseModel
 
 from ..core.auth import UserContext, get_user_context
 from ..db.supabase import get_supabase_client
-from ..services.kite_service import get_login_url, exchange_token, fetch_holdings, map_kite_holdings
+from ..services.kite_service import (
+    get_login_url,
+    exchange_token,
+    fetch_holdings,
+    fetch_mf_holdings,
+    map_kite_holdings,
+    map_kite_mf_holdings,
+)
 
 router = APIRouter(prefix="/zerodha", tags=["zerodha"])
 
@@ -78,32 +85,47 @@ def callback(payload: CallbackPayload, user: UserContext = Depends(get_user_cont
 
     try:
         raw_holdings = fetch_holdings(access_token)
-        print(raw_holdings)
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to fetch holdings from Zerodha",
         )
 
+    try:
+        raw_mf_holdings = fetch_mf_holdings(access_token)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to fetch mutual fund holdings from Zerodha",
+        )
+
     mapped = map_kite_holdings(raw_holdings)
+    mapped_mf = map_kite_mf_holdings(raw_mf_holdings)
+    combined = mapped + mapped_mf
     supabase = get_supabase_client(user.token)
 
     # Delete existing Zerodha-sourced holdings before re-importing
     supabase.table("holdings").delete().eq("user_id", user.user_id).eq("source", "zerodha").execute()
 
     inserted = []
-    for h in mapped:
-        if not h.get("symbol") or not h.get("qty"):
+    for h in combined:
+        qty = h.get("qty")
+        if not qty:
+            continue
+        if not (h.get("symbol") or h.get("isin") or h.get("scheme_name") or h.get("scheme_code")):
             continue
         row = {
             "user_id": user.user_id,
             "source": "zerodha",
-            "symbol": h["symbol"],
+            "symbol": h.get("symbol"),
             "exchange": h.get("exchange"),
             "isin": h.get("isin"),
             "qty": h["qty"],
             "avg_cost": h.get("avg_cost"),
             "asset_type": h.get("asset_type", "equity"),
+            "scheme_code": h.get("scheme_code"),
+            "scheme_name": h.get("scheme_name"),
+            "fund_house": h.get("fund_house"),
         }
         result = supabase.table("holdings").insert(row).execute()
         if result.data:
