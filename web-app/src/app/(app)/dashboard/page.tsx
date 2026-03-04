@@ -113,10 +113,10 @@ export default function DashboardPage() {
             {/* Breakdown charts */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
               <Card>
-                <DonutChart data={data.sector_split} title="Sector Breakdown" />
+                <DonutChart data={data.sector_split} title="Equity Breakdown" />
               </Card>
               <Card>
-                <DonutChart data={data.mcap_split} title="Market Cap" />
+                <DonutChart data={data.mcap_split} title="Equity Market Cap" />
               </Card>
             </div>
 
