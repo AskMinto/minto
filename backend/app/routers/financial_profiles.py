@@ -41,3 +41,23 @@ def upsert_financial_profile(
         on_conflict="user_id",
     ).execute()
     return {"status": "ok"}
+
+
+@router.get("")
+def get_financial_profile(
+    user: UserContext = Depends(get_user_context),
+):
+    supabase = get_supabase_client(user.token)
+    result = (
+        supabase.table("financial_profiles")
+        .select("version, responses, metrics, updated_at")
+        .eq("user_id", user.user_id)
+        .limit(1)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Financial profile not found",
+        )
+    return result.data[0]
