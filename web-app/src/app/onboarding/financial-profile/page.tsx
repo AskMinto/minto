@@ -992,7 +992,7 @@ export default function FinancialProfilePage() {
             <NumIn label="Debt mutual funds" {...numProps("debtMF")} placeholder="0" />
           </div>
           <div style={S.fieldRow}>
-            <NumIn label="Direct shares" {...numProps("shares")} placeholder="0" />
+            <NumIn label="Direct shares" {...numProps("shares")} placeholder="0" sub="(exclude ESOPs)" />
             <NumIn label="Gold ETF / SGB" {...numProps("goldFinancial")} placeholder="0" />
           </div>
           <div style={S.fieldRow}>
@@ -1023,7 +1023,7 @@ export default function FinancialProfilePage() {
               { val: false, label: "No international exposure" },
             ]}
           />
-          {d.hasIntlExposure && <NumIn label="Total value in ₹" {...numProps("intlAssets")} placeholder="0" />}
+          {d.hasIntlExposure && <NumIn label="Total value in ₹" {...numProps("intlAssets")} placeholder="0" sub="(exclude ESOPs already entered above)" />}
           {d.hasIntlExposure !== null && (
             <SubmitBtn
               onClick={() =>
