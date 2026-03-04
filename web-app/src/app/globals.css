@@ -50,32 +50,37 @@ body {
   100% { background-position: 0% 0%; }
 }
 
-/* Glassmorphism card utility */
+/* ── Glassmorphism tiers ─────────────────────────────────── */
+
+/* Standard glass — cards, badges, containers */
 .glass-card {
-  background: rgba(255, 255, 255, 0.55);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.45);
   border-radius: 1.25rem;
-  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.03);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
-/* Elevated glass — for sidebar, input areas, prominent surfaces */
-/* Sage-tinted frosted glass matching mobile's rgba(240,245,239,0.85) tab bar */
+/* Elevated glass — sidebar, chat input bar, prominent panels */
 .glass-elevated {
-  background: rgba(240, 245, 239, 0.72);
-  backdrop-filter: blur(24px) saturate(1.2);
-  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  background: rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(28px) saturate(1.5);
+  -webkit-backdrop-filter: blur(28px) saturate(1.5);
   border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.03);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
-/* Subtle glass — for inputs, badges, nested elements */
+/* Subtle glass — inputs, nested elements, badges */
 .glass-subtle {
-  background: rgba(255, 255, 255, 0.45);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
 /* Custom scrollbar */
