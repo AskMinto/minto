@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { apiPost } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 
 /* ─── Helpers ────────────────────────────────────────────────── */
@@ -193,7 +193,6 @@ function SubmitBtn({
 /* ─── Main Component ─────────────────────────────────────────── */
 export default function FinancialProfilePage() {
   const router = useRouter();
-  const supabase = createClient();
   const { user, recheckOnboarding } = useAuth();
   const [step, setStep] = useState(0);
   const [messages, setMessages] = useState<{ from: "minto" | "user"; text: string }[]>([]);
@@ -422,7 +421,6 @@ export default function FinancialProfilePage() {
       setSaveStatus("saving");
       setSaveError(null);
       const payload = {
-        user_id: user.id,
         version: "v1",
         responses: d,
         metrics: {
@@ -443,14 +441,7 @@ export default function FinancialProfilePage() {
           allocation: derivedAllocation(),
         },
       };
-      const { error } = await supabase
-        .from("financial_profiles")
-        .upsert(payload, { onConflict: "user_id" });
-      if (error) {
-        setSaveStatus("error");
-        setSaveError(error.message);
-        return false;
-      }
+      await apiPost("/financial-profile", payload);
       setSaveStatus("saved");
       setSaveError(null);
       await recheckOnboarding();
@@ -463,7 +454,6 @@ export default function FinancialProfilePage() {
   }, [
     user,
     d,
-    supabase,
     recheckOnboarding,
     totalIncome,
     monthlySurplus,

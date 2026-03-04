@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import cas, chats, dashboard, holdings, market, risk, zerodha
+from .routers import cas, chats, dashboard, financial_profiles, holdings, market, risk, zerodha
 
 app = FastAPI(title="Minto API")
 
@@ -20,6 +20,7 @@ app.include_router(market.router)
 app.include_router(dashboard.router)
 app.include_router(chats.router)
 app.include_router(zerodha.router)
+app.include_router(financial_profiles.router)
 
 
 @app.get("/")

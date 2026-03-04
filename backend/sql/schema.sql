@@ -69,6 +69,19 @@ create table if not exists public.cas_uploads (
   created_at timestamptz default now()
 );
 
+create table if not exists public.financial_profiles (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references public.users(id) on delete cascade,
+  version text not null default 'v1',
+  responses jsonb not null,
+  metrics jsonb,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+create unique index if not exists financial_profiles_user_id_key
+  on public.financial_profiles (user_id);
+
 -- RLS policies
 alter table public.users enable row level security;
 alter table public.risk_acknowledgments enable row level security;
@@ -77,6 +90,7 @@ alter table public.holdings enable row level security;
 alter table public.chats enable row level security;
 alter table public.chat_messages enable row level security;
 alter table public.cas_uploads enable row level security;
+alter table public.financial_profiles enable row level security;
 
 create policy "Users manage own profile" on public.users
   for all using (auth.uid() = id) with check (auth.uid() = id);
@@ -97,4 +111,7 @@ create policy "Users manage own chat messages" on public.chat_messages
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 create policy "Users manage own cas uploads" on public.cas_uploads
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "Users manage own financial profiles" on public.financial_profiles
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
