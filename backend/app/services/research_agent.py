@@ -11,43 +11,11 @@ from agno.tools.newspaper4k import Newspaper4kTools
 from agno.tools.duckduckgo import DuckDuckGoTools
 
 from ..core.config import GEMINI_API_KEY
+from ..core.prompts import prompts
 from .mfapi_service import get_latest_nav as mf_get_nav, search_schemes
 from .yfinance_service import search as yf_search
 
 logger = logging.getLogger(__name__)
-
-AGENT_INSTRUCTIONS = [
-    "You are Minto — a chill, sharp portfolio assistant for Indian retail investors.",
-    "You make finance fun and easy to understand. Casual tone, relatable analogies.",
-    "",
-    "MANDATORY TOOL USAGE:",
-    "- You have NO knowledge of current stock prices or NAVs. Your training data is OUTDATED.",
-    "- For [EQ] equity holdings: call get_current_stock_price with .NS suffix (e.g. SBIN.NS).",
-    "- For [MF] mutual fund holdings: call _get_mf_nav with the scheme_code from the portfolio.",
-    "- Report the EXACT number the tool returns. Never round, adjust, or estimate.",
-    "- If a tool errors, say 'data unavailable right now'. NEVER make up a number.",
-    "- NEVER ask the user 'would you like me to look that up?' — just look it up.",
-    "",
-    "RESEARCH STRATEGY — pick the right tool:",
-    "- Stock-specific news → get_company_news (uses Yahoo Finance, needs .NS/.BO symbol)",
-    "- Broader topics, macro events, general market news → web_search (DuckDuckGo)",
-    "- Breaking news, trending topics → search_news (DuckDuckGo News)",
-    "- Full article content from a URL → read_article",
-    "- Market indices (Nifty, Sensex, Bank Nifty) → _get_market_overview",
-    "- For complex questions, use MULTIPLE tools: search first, then read articles for depth.",
-    "",
-    "RESEARCH PROCESS:",
-    "1. For any question about current events or news, SEARCH first using the appropriate tool",
-    "2. If you find interesting articles, READ them using read_article for full context",
-    "3. Cross-reference with portfolio holdings and market data when relevant",
-    "4. Synthesize into a clear, punchy answer backed by real facts",
-    "",
-    "RESPONSE RULES:",
-    "- Keep it tight: 3-5 sentences unless they ask for more detail",
-    "- Lead with the insight, skip the preamble",
-    "- Never give buy/sell instructions or target prices",
-    "- Use ₹ and Indian market context (Nifty, Sensex, NSE, BSE)",
-]
 
 
 class AgentNotConfigured(Exception):
@@ -147,15 +115,16 @@ def _build_agent(system_prompt: str, chat_history: list[dict] | None = None) -> 
         region="in-en",
     )
 
+    cfg = prompts.agent_config
     agent = Agent(
-        model=Gemini(id="gemini-3-flash-preview", temperature=0.3),
+        model=Gemini(id=cfg.get("model", "gemini-3-flash-preview"), temperature=cfg.get("temperature", 0.3)),
         tools=[yf_tools, newspaper_tools, ddg_tools, _get_mf_nav, _search_instrument, _get_market_overview],
         description=system_prompt,
-        instructions=AGENT_INSTRUCTIONS,
+        instructions=prompts.agent_instructions,
         markdown=False,
-        tool_call_limit=12,
+        tool_call_limit=cfg.get("tool_call_limit", 12),
         add_datetime_to_context=True,
-        timezone_identifier="Asia/Kolkata",
+        timezone_identifier=cfg.get("timezone", "Asia/Kolkata"),
     )
     return agent
 

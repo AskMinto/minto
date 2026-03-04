@@ -10,12 +10,7 @@ from pydantic import BaseModel
 
 from ..core.auth import UserContext, get_user_context
 from ..core.config import ASSISTANT_DISCLAIMER
-
-# Disclaimer text to strip from chat history so the model doesn't learn to repeat it
-_DISCLAIMER_PATTERNS = [
-    "Minto provides informational insights, not investment advice.",
-    "Consider consulting a SEBI-registered advisor before making decisions.",
-]
+from ..core.prompts import prompts
 from ..db.supabase import get_supabase_client
 from ..services.gemini import generate_response, GeminiNotConfigured
 from ..services.guardrails import append_disclaimer, contains_blocked_phrase, safe_response
@@ -136,73 +131,11 @@ def get_messages(user: UserContext = Depends(get_user_context)):
 
 
 def _build_system_prompt(risk_profile: dict | None = None) -> str:
-    risk_section = ""
-    if risk_profile:
-        level = risk_profile.get("risk_level", "unknown")
-        score = risk_profile.get("risk_score", "N/A")
-        risk_section = (
-            f"\nThe user's risk profile is: {level} (score: {score}). "
-            "Tailor your language and examples to this risk level. "
-        )
-
-    return (
-        "You are Minto, a portfolio assistant for Indian retail investors. "
-        "You help users understand their portfolio, explain market concepts, "
-        "and provide data-driven insights.\n\n"
-        "CRITICAL: You do NOT know any current stock prices or NAVs. "
-        "You MUST call get_current_stock_price (with .NS or .BO suffix) to get any price. "
-        "NEVER state a price without calling the tool first. "
-        "If you cannot call the tool, say the price is unavailable.\n\n"
-        "RULES:\n"
-        "- Never give buy/sell instructions or specific investment recommendations.\n"
-        "- Always use Indian market context (NSE, BSE, Nifty 50, Sensex).\n"
-        "- Explain concepts simply using relatable analogies.\n"
-        "- When asked about news or price moves, call get_company_news first.\n"
-        "- Keep responses concise: 3-5 sentences unless asked for detail.\n"
-        "- Never ask the user if they want you to look something up — just do it.\n"
-        "- NEVER add disclaimers, legal notices, or 'consult a financial advisor' messages. "
-        "The app already shows a disclaimer banner.\n"
-        f"{risk_section}"
-    )
+    return prompts.build_system_prompt(risk_profile)
 
 
 def _build_user_prompt(message: str, memory: str, portfolio: dict) -> str:
-    totals = portfolio.get("totals", {})
-    top_holdings = portfolio.get("top_holdings", [])
-
-    portfolio_summary = (
-        f"Invested: ₹{totals.get('invested', 0):,.0f}, "
-        f"P&L: {totals.get('pnl_pct', 0):.1f}%"
-    )
-
-    # Show holding names with type labels so the agent knows which tool to use
-    # NO prices/values to prevent hallucination
-    holdings_lines = []
-    for h in top_holdings[:10]:
-        scheme_code = h.get("scheme_code")
-        if scheme_code:
-            name = h.get("scheme_name") or f"MF:{scheme_code}"
-            holdings_lines.append(f"  [MF] {name} (scheme_code={scheme_code})")
-        else:
-            name = h.get("symbol") or h.get("isin") or "Unknown"
-            holdings_lines.append(f"  [EQ] {name}")
-    holdings_block = "\n".join(holdings_lines) if holdings_lines else "  No holdings"
-
-    memory_block = (
-        f"--- LONG-TERM MEMORY (past conversations) ---\n{memory}\n\n"
-        if memory else ""
-    )
-
-    return (
-        f"{memory_block}"
-        f"--- CURRENT PORTFOLIO ---\n"
-        f"Summary: {portfolio_summary}\n"
-        f"Top holdings (no prices — you MUST call tools to get current prices):\n"
-        f"{holdings_block}\n"
-        f"Tool hints: [EQ] → get_current_stock_price with .NS suffix. "
-        f"[MF] → _get_mf_nav with the scheme_code.\n\n"
-        f"--- USER MESSAGE ---\n{message}"
-    )
+    return prompts.build_user_prompt(message, memory, portfolio)
 
 
 def _load_chat_context(supabase, user, chat_id: str):
@@ -216,12 +149,16 @@ def _load_chat_context(supabase, user, chat_id: str):
     portfolio = compute_portfolio(holdings)
     memory = get_memory(user.user_id)
 
+    cfg = prompts.agent_config
+    max_history = cfg.get("max_history_messages", 10)
+    max_msg_len = cfg.get("max_assistant_message_length", 500)
+
     recent_history = (
         supabase.table("chat_messages")
         .select("role,content")
         .eq("chat_id", chat_id)
         .order("created_at", desc=True)
-        .limit(10)
+        .limit(max_history)
         .execute()
     ).data or []
     recent_history = list(reversed(recent_history))[:-1]
@@ -229,12 +166,11 @@ def _load_chat_context(supabase, user, chat_id: str):
     for msg in recent_history:
         if msg.get("role") == "assistant" and msg.get("content"):
             content = msg["content"]
-            for pattern in _DISCLAIMER_PATTERNS:
+            for pattern in prompts.disclaimer_strip_patterns:
                 content = content.replace(pattern, "")
             content = content.strip()
-            # Truncate long assistant messages to keep context lean
-            if len(content) > 500:
-                content = content[:500] + "..."
+            if len(content) > max_msg_len:
+                content = content[:max_msg_len] + "..."
             msg["content"] = content
 
     risk_profile = None
