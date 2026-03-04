@@ -5,6 +5,7 @@ from typing import Any
 
 from .yfinance_service import get_quote
 from .mfapi_service import get_latest_nav
+from .fund_weights import get_fund_weights
 
 
 def _find_value(payload: Any, keys: list[str]) -> float | None:
@@ -81,12 +82,35 @@ def compute_portfolio(holdings: list[dict[str, Any]]) -> dict[str, Any]:
         invested += invested_cost
         today_pnl += today
 
-        sector = holding.get("sector") or "Unknown"
-        mcap = holding.get("mcap_bucket") or "Unknown"
         asset = holding.get("asset_type") or "Unknown"
-        sector_totals[sector] += value
-        mcap_totals[mcap] += value
         asset_totals[asset] += value
+
+        # Look-through analysis for mutual funds: distribute value
+        # across underlying sectors/mcap proportionally.
+        asset_lower = asset.lower()
+        scheme_name = holding.get("scheme_name")
+        if asset_lower == "mutual_fund" and scheme_name:
+            weights = get_fund_weights(
+                scheme_name=scheme_name,
+                scheme_category=holding.get("sector"),
+            )
+            sw = weights.get("sector_weights", {})
+            mw = weights.get("mcap_weights", {})
+            if sw:
+                for s_label, s_pct in sw.items():
+                    sector_totals[s_label] += value * (s_pct / 100.0)
+            else:
+                sector_totals[holding.get("sector") or "Unknown"] += value
+            if mw:
+                for m_label, m_pct in mw.items():
+                    mcap_totals[m_label] += value * (m_pct / 100.0)
+            else:
+                mcap_totals[holding.get("mcap_bucket") or "Unknown"] += value
+        else:
+            sector = holding.get("sector") or "Unknown"
+            mcap = holding.get("mcap_bucket") or "Unknown"
+            sector_totals[sector] += value
+            mcap_totals[mcap] += value
 
         enriched.append(
             {
