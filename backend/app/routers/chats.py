@@ -134,8 +134,8 @@ def _build_system_prompt(risk_profile: dict | None = None) -> str:
     return prompts.build_system_prompt(risk_profile)
 
 
-def _build_user_prompt(message: str, memory: str, portfolio: dict) -> str:
-    return prompts.build_user_prompt(message, memory, portfolio)
+def _build_user_prompt(message: str, memory: str, portfolio: dict, financial_profile: dict | None = None) -> str:
+    return prompts.build_user_prompt(message, memory, portfolio, financial_profile)
 
 
 def _load_chat_context(supabase, user, chat_id: str):
@@ -187,7 +187,21 @@ def _load_chat_context(supabase, user, chat_id: str):
     except Exception:
         pass
 
-    return portfolio, memory, recent_history, risk_profile
+    financial_profile = None
+    try:
+        fp_result = (
+            supabase.table("financial_profiles")
+            .select("responses,metrics")
+            .eq("user_id", user.user_id)
+            .limit(1)
+            .execute()
+        )
+        if fp_result.data:
+            financial_profile = fp_result.data[0]
+    except Exception:
+        pass
+
+    return portfolio, memory, recent_history, risk_profile, financial_profile
 
 
 def _apply_guardrails(reply: str, widgets: list[dict]) -> tuple[str, list[dict]]:
@@ -237,8 +251,8 @@ def send_message(
 
     widgets: list[dict] = []
 
-    portfolio, memory, recent_history, risk_profile = _load_chat_context(supabase, user, chat_id)
-    prompt = _build_user_prompt(payload.content, memory, portfolio)
+    portfolio, memory, recent_history, risk_profile, financial_profile = _load_chat_context(supabase, user, chat_id)
+    prompt = _build_user_prompt(payload.content, memory, portfolio, financial_profile)
     system_prompt = _build_system_prompt(risk_profile)
 
     try:
@@ -291,8 +305,8 @@ def send_message_stream(
         }
     ).execute()
 
-    portfolio, memory, recent_history, risk_profile = _load_chat_context(supabase, user, chat_id)
-    prompt = _build_user_prompt(payload.content, memory, portfolio)
+    portfolio, memory, recent_history, risk_profile, financial_profile = _load_chat_context(supabase, user, chat_id)
+    prompt = _build_user_prompt(payload.content, memory, portfolio, financial_profile)
     system_prompt = _build_system_prompt(risk_profile)
 
     def event_generator():

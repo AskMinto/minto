@@ -87,6 +87,20 @@ user_prompt:
     {holdings_block}
     Tool hints: [EQ] → get_current_stock_price with .NS suffix. [MF] → _get_mf_nav with the scheme_code.
 
+  financial_profile_section: |
+    --- FINANCIAL PROFILE (user's balance sheet & financial health) ---
+    Name: {name}, Age: {age}, Occupation: {job}
+    Household: {earners} earner(s), {dependents} dependent(s)
+    Monthly income: {total_income}, Monthly surplus: {monthly_surplus}
+    Total debt: {total_debt}, Total assets: {total_assets}, Net worth: {net_worth}
+    Key ratios — Savings: {savings_ratio}, DTI: {dti}, Liquidity: {liquidity_ratio}, Solvency: {solvency_ratio}
+    ESOP concentration: {esop_concentration}
+    Insurance: {insurance}
+    ESOPs: {esops}
+    Goals: {goals}
+    Behavioral comfort: {comfort}
+    Suggested allocation: {allocation}
+
   message_section: |
     --- USER MESSAGE ---
     {message}

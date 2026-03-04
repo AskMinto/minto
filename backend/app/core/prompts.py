@@ -74,6 +74,7 @@ class Prompts:
         message: str,
         memory: str,
         portfolio: dict[str, Any],
+        financial_profile: dict[str, Any] | None = None,
     ) -> str:
         cfg = self._data["user_prompt"]
         totals = portfolio.get("totals", {})
@@ -112,8 +113,124 @@ class Prompts:
             )
             .strip()
         )
+        if financial_profile:
+            fp_block = self._format_financial_profile(financial_profile)
+            if fp_block:
+                parts.append(fp_block)
         parts.append(cfg["message_section"].format(message=message).strip())
         return "\n\n".join(parts)
+
+    def _format_financial_profile(self, profile: dict[str, Any]) -> str:
+        """Format the financial profile into a concise context block."""
+        template = self._data["user_prompt"].get("financial_profile_section", "")
+        if not template:
+            return ""
+
+        responses = profile.get("responses", {})
+        metrics = profile.get("metrics", {})
+
+        def fmt(n: Any) -> str:
+            if n is None or n == "" or n == 0:
+                return "—"
+            try:
+                num = float(n)
+                if num >= 10000000:
+                    return f"₹{num / 10000000:.2f}Cr"
+                if num >= 100000:
+                    return f"₹{num / 100000:.1f}L"
+                if num >= 1000:
+                    return f"₹{num / 1000:.0f}K"
+                return f"₹{num:,.0f}"
+            except (TypeError, ValueError):
+                return str(n)
+
+        def pct(n: Any) -> str:
+            if n is None:
+                return "—"
+            try:
+                return f"{float(n):.1f}%"
+            except (TypeError, ValueError):
+                return "—"
+
+        name = responses.get("name", "—")
+        age = responses.get("age", "—")
+        job = responses.get("jobNature", "—")
+        earners = responses.get("earningMembers", "—")
+        dependents = responses.get("dependents", "—")
+
+        total_income = metrics.get("total_income", 0)
+        monthly_surplus = metrics.get("monthly_surplus", 0)
+        total_debt = metrics.get("total_debt", 0)
+        total_assets = metrics.get("total_assets", 0)
+        net_worth = metrics.get("net_worth", 0)
+
+        savings_ratio = metrics.get("savings_ratio")
+        dti = metrics.get("dti")
+        liquidity_ratio = metrics.get("liquidity_ratio")
+        solvency_ratio = metrics.get("solvency_ratio")
+        esop_concentration = metrics.get("esop_concentration")
+
+        has_life_ins = responses.get("hasLifeInsurance")
+        life_cover = responses.get("lifeInsuranceCover", 0)
+        has_health_ins = responses.get("hasHealthInsurance")
+        health_cover = responses.get("healthInsuranceCover", 0)
+
+        has_esops = responses.get("hasEsops")
+        esop_type = responses.get("esopCompanyType", "")
+        esop_vested = responses.get("esopVestedValue", 0)
+
+        goals = responses.get("goals", [])
+        goals_str = ", ".join(
+            f"{g.get('name', '?')} ({fmt(g.get('amount'))} in {g.get('years', '?')}y)"
+            for g in goals[:5]
+        ) if goals else "None set"
+
+        comfort = responses.get("comfortLevel", "—")
+        comfort_labels = {
+            "buy_more": "Buy more in a dip",
+            "calm": "Hold calmly",
+            "anxious": "Gets anxious",
+            "sell": "Likely to sell",
+        }
+        comfort_str = comfort_labels.get(comfort, comfort)
+
+        allocation = metrics.get("allocation", {})
+        alloc_str = ", ".join(
+            f"{k}: {v}%" for k, v in allocation.items()
+        ) if allocation else "—"
+
+        insurance_str = ""
+        if has_life_ins is not None:
+            insurance_str += f"Life: {'Yes ' + fmt(life_cover) if has_life_ins else 'No'}"
+        if has_health_ins is not None:
+            insurance_str += f", Health: {'Yes ' + fmt(health_cover) if has_health_ins else 'No'}"
+
+        esop_str = "None"
+        if has_esops:
+            esop_str = f"{esop_type} company, vested: {fmt(esop_vested)}"
+
+        return template.format(
+            name=name,
+            age=age,
+            job=job,
+            earners=earners,
+            dependents=dependents,
+            total_income=fmt(total_income),
+            monthly_surplus=fmt(monthly_surplus),
+            total_debt=fmt(total_debt),
+            total_assets=fmt(total_assets),
+            net_worth=fmt(net_worth),
+            savings_ratio=pct(savings_ratio),
+            dti=pct(dti),
+            liquidity_ratio=f"{liquidity_ratio:.1f} months" if liquidity_ratio else "—",
+            solvency_ratio=pct(solvency_ratio),
+            esop_concentration=pct(esop_concentration),
+            insurance=insurance_str or "—",
+            esops=esop_str,
+            goals=goals_str,
+            comfort=comfort_str,
+            allocation=alloc_str,
+        ).strip()
 
     # ── Guardrails ───────────────────────────────────────
 
