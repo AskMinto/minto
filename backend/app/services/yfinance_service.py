@@ -50,6 +50,9 @@ def _to_yahoo_symbol(symbol: str | None, exchange: str | None) -> str | None:
         return f"{symbol}.NS"
     if exch == "BSE":
         return f"{symbol}.BO"
+    # Default plain symbols (no dot suffix) to NSE — this is an Indian market app
+    if "." not in sym:
+        return f"{symbol}.NS"
     return symbol
 
 

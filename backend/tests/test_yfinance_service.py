@@ -58,6 +58,15 @@ class TestToYahooSymbol:
     def test_none(self):
         assert _to_yahoo_symbol(None, None) is None
 
+    def test_plain_defaults_to_nse(self):
+        assert _to_yahoo_symbol("SBIN", None) == "SBIN.NS"
+
+    def test_foreign_symbol_unchanged(self):
+        assert _to_yahoo_symbol("AAPL", "NASDAQ") == "AAPL.NS"
+
+    def test_dotted_symbol_unchanged(self):
+        assert _to_yahoo_symbol("BRK.B", None) == "BRK.B"
+
 
 class TestStripSuffix:
     def test_ns(self):
