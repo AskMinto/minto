@@ -52,7 +52,7 @@ export function Sidebar() {
   const initial = userName.charAt(0).toUpperCase();
 
   const sidebar = (
-    <aside className="w-[260px] h-full bg-white/40 backdrop-blur-xl border-r border-white/30 flex flex-col">
+    <aside className="w-[260px] h-full glass-elevated border-r border-white/30 flex flex-col">
       {/* Header */}
       <div className="p-4 flex items-center gap-3">
         <Image src="/minto.png" alt="Minto" width={32} height={32} />

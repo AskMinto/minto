@@ -14,7 +14,7 @@ export function MessageBubble({ role, content, isStreaming }: Props) {
   if (role === "user") {
     return (
       <div className="flex justify-end mb-6">
-        <div className="bg-white/90 rounded-3xl rounded-br-md px-5 py-4 max-w-[75%] shadow-sm">
+        <div className="bg-white/95 rounded-3xl rounded-br-md px-5 py-4 max-w-[75%] shadow-[0_2px_8px_rgba(0,0,0,0.06)]">
           <p className="text-minto-text text-[15px] leading-relaxed whitespace-pre-wrap">
             {content}
           </p>

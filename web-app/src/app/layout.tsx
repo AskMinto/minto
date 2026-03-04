@@ -24,6 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={dmSans.variable}>
       <body className="font-[family-name:var(--font-dm-sans)] antialiased min-h-screen">
+        <div className="animated-gradient-bg" />
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

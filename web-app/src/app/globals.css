@@ -21,17 +21,50 @@ body {
 }
 
 body {
-  background: linear-gradient(160deg, #c8d5c0 0%, #b5c9a8 50%, #d4dcc8 100%);
   min-height: 100vh;
+}
+
+/* Animated gradient background — matches mobile's breathing animation */
+.animated-gradient-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: linear-gradient(160deg, #f0f4ef 0%, #9ebf9c 45%, #eaf0e8 100%);
+  animation: gradientBreath 12s ease-in-out infinite;
+}
+
+@keyframes gradientBreath {
+  0%   { background: linear-gradient(160deg, #f0f4ef 0%, #9ebf9c 45%, #eaf0e8 100%); }
+  33%  { background: linear-gradient(160deg, #eaf0e8 0%, #8cac8a 45%, #f0f4ef 100%); }
+  66%  { background: linear-gradient(160deg, #f0f4ef 0%, #7b9f7a 45%, #eaf0e8 100%); }
+  100% { background: linear-gradient(160deg, #f0f4ef 0%, #9ebf9c 45%, #eaf0e8 100%); }
 }
 
 /* Glassmorphism card utility */
 .glass-card {
   background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 1.25rem;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.03);
+}
+
+/* Elevated glass — for sidebar, input areas, prominent surfaces */
+.glass-elevated {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+}
+
+/* Subtle glass — for inputs, badges, nested elements */
+.glass-subtle {
+  background: rgba(255, 255, 255, 0.45);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 1.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
 /* Custom scrollbar */
