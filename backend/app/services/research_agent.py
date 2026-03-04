@@ -155,6 +155,7 @@ def _build_agent(system_prompt: str, chat_history: list[dict] | None = None) -> 
         markdown=False,
         tool_call_limit=12,
         add_datetime_to_context=True,
+        timezone_identifier="Asia/Kolkata",
     )
     return agent
 
