@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/providers/auth-provider";
 import { apiGet } from "@/lib/api";
+import { GlassPanel } from "@/components/ui/glass-panel";
 import {
   MessageCircle,
   LayoutDashboard,
@@ -51,8 +52,10 @@ export function Sidebar() {
 
   const initial = userName.charAt(0).toUpperCase();
 
-  const sidebar = (
-    <aside className="w-[260px] h-full glass-elevated border-r border-white/30 flex flex-col">
+  const sidebarRef = useRef<HTMLDivElement>(null);
+
+  const sidebarContent = (
+    <>
       {/* Header */}
       <div className="p-4 flex items-center gap-3">
         <Image src="/minto.png" alt="Minto" width={32} height={32} />
@@ -127,6 +130,22 @@ export function Sidebar() {
           </button>
         </div>
       </div>
+    </>
+  );
+
+  const sidebar = (
+    <aside ref={sidebarRef} className="w-[260px] h-full flex flex-col">
+      <GlassPanel
+        cornerRadius={0}
+        padding="0px"
+        blurAmount={0.06}
+        displacementScale={60}
+        elasticity={0.08}
+        mouseContainer={sidebarRef}
+        style={{ height: "100%", display: "flex", flexDirection: "column" }}
+      >
+        {sidebarContent}
+      </GlassPanel>
     </aside>
   );
 
