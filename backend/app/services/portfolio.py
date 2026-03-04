@@ -169,29 +169,34 @@ def concentration_flags(holdings: list[dict[str, Any]]) -> list[dict[str, Any]]:
         pct = (holding.get("value", 0.0) / total_value) * 100
         if pct > 15:
             severity = "red" if pct > 25 else "yellow"
+            label = (
+                holding.get("symbol")
+                or holding.get("scheme_name")
+                or holding.get("isin")
+                or "Holding"
+            )
+            # Clean up long MF names: take the fund name before " - "
+            if " - " in label and len(label) > 40:
+                label = label.split(" - ")[0].strip()
             flags.append(
                 {
                     "type": "stock",
-                    "label": holding.get("symbol") or holding.get("isin") or "Holding",
+                    "label": label,
                     "pct": pct,
                     "severity": severity,
-                    "why": "High single-stock exposure increases drawdown risk if that stock falls.",
+                    "why": "High single-holding exposure increases drawdown risk if this position falls.",
                 }
             )
 
-    sector_totals = defaultdict(float)
-    for holding in portfolio["holdings"]:
-        sector = holding.get("sector") or "Unknown"
-        sector_totals[sector] += holding.get("value", 0.0)
-
-    for sector, value in sector_totals.items():
-        pct = (value / total_value) * 100
+    # Use look-through sector splits for concentration checks
+    for item in portfolio["sector_split"]:
+        pct = item.get("pct", 0.0)
         if pct > 30:
             severity = "red" if pct > 45 else "yellow"
             flags.append(
                 {
                     "type": "sector",
-                    "label": sector,
+                    "label": item["label"],
                     "pct": pct,
                     "severity": severity,
                     "why": "Sector concentration raises exposure to sector-specific shocks.",
