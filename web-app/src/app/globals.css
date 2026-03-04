@@ -61,12 +61,13 @@ body {
 }
 
 /* Elevated glass — for sidebar, input areas, prominent surfaces */
+/* Sage-tinted frosted glass matching mobile's rgba(240,245,239,0.85) tab bar */
 .glass-elevated {
-  background: rgba(255, 255, 255, 0.65);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+  background: rgba(240, 245, 239, 0.72);
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.03);
 }
 
 /* Subtle glass — for inputs, badges, nested elements */
