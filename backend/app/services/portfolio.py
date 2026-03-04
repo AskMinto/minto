@@ -158,6 +158,31 @@ def compute_portfolio(holdings: list[dict[str, Any]]) -> dict[str, Any]:
         items.sort(key=lambda x: x["value"], reverse=True)
         return items
 
+    # Equity-only sector split: exclude non-equity sectors and recalculate pct
+    _NON_EQUITY_SECTORS = {"Commodity", "Debt", "Cash", "Gold", "Silver"}
+    equity_sector_totals = {
+        k: v for k, v in sector_totals.items() if k not in _NON_EQUITY_SECTORS
+    }
+    equity_total = sum(equity_sector_totals.values())
+
+    def to_equity_split(data: dict[str, float], group_threshold: float = 0.0) -> list[dict[str, Any]]:
+        items = []
+        others_value = 0.0
+        for key, val in data.items():
+            pct = (val / equity_total * 100) if equity_total else 0.0
+            if group_threshold > 0 and pct < group_threshold:
+                others_value += val
+            else:
+                items.append({"label": key, "value": val, "pct": pct})
+        if others_value > 0:
+            items.append({
+                "label": "Others",
+                "value": others_value,
+                "pct": (others_value / equity_total * 100) if equity_total else 0.0,
+            })
+        items.sort(key=lambda x: x["value"], reverse=True)
+        return items
+
     return {
         "totals": {
             "total_value": total_value,
@@ -167,7 +192,7 @@ def compute_portfolio(holdings: list[dict[str, Any]]) -> dict[str, Any]:
             "today_pnl": today_pnl,
         },
         "top_holdings": sorted(enriched, key=lambda x: x.get("value", 0), reverse=True)[:5],
-        "sector_split": to_split(sector_totals, group_threshold=2.0),
+        "sector_split": to_equity_split(equity_sector_totals, group_threshold=2.0),
         "mcap_split": to_split(mcap_totals),
         "asset_split": to_split(asset_totals),
         "asset_class_split": to_split(asset_class_totals),
