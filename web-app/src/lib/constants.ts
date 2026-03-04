@@ -18,7 +18,20 @@ export const CHART_COLORS = [
   "#7b5c5c",
   "#6a8fa0",
   "#9a7daa",
+  "#4a7c59",
+  "#8b7355",
+  "#5b8a9a",
+  "#7d6b8a",
+  "#6b8c5c",
+  "#9a8a6a",
 ];
+
+export const ASSET_CLASS_COLORS: Record<string, string> = {
+  Equity: "#3d5a3e",
+  Debt: "#6a8fa0",
+  "Gold & Commodity": "#b8943e",
+  Others: "#9a7daa",
+};
 
 export const SUGGESTION_CHIPS = [
   "How's my portfolio doing?",

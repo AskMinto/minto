@@ -16,6 +16,7 @@ interface DashboardData {
   sector_split: { label: string; value: number; pct: number }[];
   mcap_split: { label: string; value: number; pct: number }[];
   asset_split: { label: string; value: number; pct: number }[];
+  asset_class_split: { label: string; value: number; pct: number }[];
   concentration_flags: {
     type: string;
     label: string;

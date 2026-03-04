@@ -103,10 +103,10 @@ export default function DashboardPage() {
               <MFHoldingsTable holdings={data.mf_holdings as never[]} />
             </div>
 
-            {/* Asset allocation */}
-            {data.asset_split.length > 0 && (
+            {/* Asset class allocation */}
+            {data.asset_class_split?.length > 0 && (
               <Card className="mb-6">
-                <AssetAllocationBar data={data.asset_split} />
+                <AssetAllocationBar data={data.asset_class_split} />
               </Card>
             )}
 

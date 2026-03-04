@@ -35,6 +35,18 @@ def extract_prices(quote: Any) -> tuple[float | None, float | None]:
     return ltp, prev
 
 
+_ASSET_CLASS_MAP = {
+    "Debt": "Debt",
+    "Commodity": "Gold & Commodity",
+    "Gold": "Gold & Commodity",
+}
+
+
+def _sector_to_asset_class(sector: str) -> str:
+    """Map a sector label to a high-level asset class."""
+    return _ASSET_CLASS_MAP.get(sector, "Equity")
+
+
 def compute_portfolio(holdings: list[dict[str, Any]]) -> dict[str, Any]:
     enriched = []
     total_value = 0.0
@@ -44,6 +56,7 @@ def compute_portfolio(holdings: list[dict[str, Any]]) -> dict[str, Any]:
     sector_totals = defaultdict(float)
     mcap_totals = defaultdict(float)
     asset_totals = defaultdict(float)
+    asset_class_totals = defaultdict(float)  # true underlying: Equity/Debt/Gold/Commodity
 
     for holding in holdings:
         qty = float(holding.get("qty") or 0)
@@ -98,9 +111,14 @@ def compute_portfolio(holdings: list[dict[str, Any]]) -> dict[str, Any]:
             mw = weights.get("mcap_weights", {})
             if sw:
                 for s_label, s_pct in sw.items():
-                    sector_totals[s_label] += value * (s_pct / 100.0)
+                    alloc = value * (s_pct / 100.0)
+                    sector_totals[s_label] += alloc
+                    # Map sector to asset class
+                    ac = _sector_to_asset_class(s_label)
+                    asset_class_totals[ac] += alloc
             else:
                 sector_totals[holding.get("sector") or "Unknown"] += value
+                asset_class_totals["Equity"] += value
             if mw:
                 for m_label, m_pct in mw.items():
                     mcap_totals[m_label] += value * (m_pct / 100.0)
@@ -111,6 +129,7 @@ def compute_portfolio(holdings: list[dict[str, Any]]) -> dict[str, Any]:
             mcap = holding.get("mcap_bucket") or "Unknown"
             sector_totals[sector] += value
             mcap_totals[mcap] += value
+            asset_class_totals["Equity"] += value
 
         enriched.append(
             {
@@ -127,15 +146,28 @@ def compute_portfolio(holdings: list[dict[str, Any]]) -> dict[str, Any]:
     pnl_total = total_value - invested
     pnl_pct_total = (pnl_total / invested * 100) if invested else 0.0
 
-    def to_split(data: dict[str, float]) -> list[dict[str, Any]]:
-        return [
-            {
-                "label": key,
-                "value": value,
-                "pct": (value / total_value * 100) if total_value else 0.0,
-            }
-            for key, value in data.items()
-        ]
+    def to_split(data: dict[str, float], group_threshold: float = 0.0) -> list[dict[str, Any]]:
+        """Convert totals dict into sorted split list.
+
+        If group_threshold > 0, items below that percentage are grouped
+        into an "Others" bucket.
+        """
+        items = []
+        others_value = 0.0
+        for key, val in data.items():
+            pct = (val / total_value * 100) if total_value else 0.0
+            if group_threshold > 0 and pct < group_threshold:
+                others_value += val
+            else:
+                items.append({"label": key, "value": val, "pct": pct})
+        if others_value > 0:
+            items.append({
+                "label": "Others",
+                "value": others_value,
+                "pct": (others_value / total_value * 100) if total_value else 0.0,
+            })
+        items.sort(key=lambda x: x["value"], reverse=True)
+        return items
 
     return {
         "totals": {
@@ -146,9 +178,10 @@ def compute_portfolio(holdings: list[dict[str, Any]]) -> dict[str, Any]:
             "today_pnl": today_pnl,
         },
         "top_holdings": sorted(enriched, key=lambda x: x.get("value", 0), reverse=True)[:5],
-        "sector_split": to_split(sector_totals),
+        "sector_split": to_split(sector_totals, group_threshold=2.0),
         "mcap_split": to_split(mcap_totals),
         "asset_split": to_split(asset_totals),
+        "asset_class_split": to_split(asset_class_totals),
         "holdings": enriched,
     }
 

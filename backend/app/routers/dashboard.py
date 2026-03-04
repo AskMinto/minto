@@ -34,6 +34,7 @@ def get_dashboard(user: UserContext = Depends(get_user_context)):
         "sector_split": portfolio["sector_split"],
         "mcap_split": portfolio["mcap_split"],
         "asset_split": portfolio["asset_split"],
+        "asset_class_split": portfolio["asset_class_split"],
         "concentration_flags": flags,
     }
 

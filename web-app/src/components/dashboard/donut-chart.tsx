@@ -12,9 +12,11 @@ interface DataItem {
 interface Props {
   data: DataItem[];
   title: string;
+  colorMap?: Record<string, string>;
+  maxLegend?: number;
 }
 
-export function DonutChart({ data, title }: Props) {
+export function DonutChart({ data, title, colorMap, maxLegend = 8 }: Props) {
   if (!data.length) {
     return (
       <div className="text-center py-8">
@@ -23,40 +25,49 @@ export function DonutChart({ data, title }: Props) {
     );
   }
 
+  const getColor = (item: DataItem, index: number) =>
+    colorMap?.[item.label] ?? CHART_COLORS[index % CHART_COLORS.length];
+
+  const sorted = [...data].sort((a, b) => b.value - a.value);
+
   return (
     <div>
       <h4 className="text-sm font-medium text-minto-text mb-3">{title}</h4>
-      <div className="flex items-center gap-4">
-        <div className="w-[120px] h-[120px]">
+      <div className="flex items-center gap-5">
+        <div className="w-[130px] h-[130px] shrink-0">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
-                data={data}
+                data={sorted}
                 dataKey="value"
                 nameKey="label"
                 cx="50%"
                 cy="50%"
-                innerRadius={35}
-                outerRadius={55}
+                innerRadius={38}
+                outerRadius={60}
                 paddingAngle={2}
                 strokeWidth={0}
               >
-                {data.map((_, i) => (
-                  <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                {sorted.map((item, i) => (
+                  <Cell key={item.label} fill={getColor(item, i)} />
                 ))}
               </Pie>
             </PieChart>
           </ResponsiveContainer>
         </div>
-        <div className="flex-1 space-y-1.5">
-          {data.slice(0, 5).map((item, i) => (
+        <div className="flex-1 space-y-1">
+          {sorted.slice(0, maxLegend).map((item, i) => (
             <div key={item.label} className="flex items-center gap-2 text-xs">
               <span
-                className="w-2.5 h-2.5 rounded-full shrink-0"
-                style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{ backgroundColor: getColor(item, i) }}
               />
-              <span className="text-minto-text-secondary truncate flex-1">{item.label}</span>
-              <span className="text-minto-text-muted">{item.pct?.toFixed(0)}%</span>
+              <span className="text-minto-text-secondary truncate flex-1">
+                {item.label}
+              </span>
+              <span className="text-minto-text font-medium tabular-nums">
+                {item.pct?.toFixed(1)}%
+              </span>
             </div>
           ))}
         </div>
