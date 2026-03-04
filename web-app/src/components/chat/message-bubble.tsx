@@ -31,9 +31,11 @@ export function MessageBubble({ role, content, isStreaming }: Props) {
       </div>
       <div className="flex-1 min-w-0 max-w-[85%]">
         {!content && isStreaming ? (
-          <p className="text-minto-text-muted text-sm italic animate-pulse">
-            Thinking...
-          </p>
+          <div className="glass-card inline-flex items-center gap-1.5 px-4 py-3 rounded-2xl rounded-bl-md">
+            <span className="w-2 h-2 rounded-full bg-minto-accent/40 animate-[bounce_1.4s_ease-in-out_infinite]" />
+            <span className="w-2 h-2 rounded-full bg-minto-accent/40 animate-[bounce_1.4s_ease-in-out_0.2s_infinite]" />
+            <span className="w-2 h-2 rounded-full bg-minto-accent/40 animate-[bounce_1.4s_ease-in-out_0.4s_infinite]" />
+          </div>
         ) : (
           <div className="chat-markdown text-minto-text text-[15px] leading-relaxed">
             <ReactMarkdown
