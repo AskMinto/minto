@@ -158,8 +158,8 @@ _CATEGORY_MCAP_MAP: dict[str, dict[str, float]] = {
     "small_cap": {"Small Cap": 100.0},
     "flexi_cap": {"Large Cap": 55.0, "Mid Cap": 30.0, "Small Cap": 15.0},
     "hybrid": {"Large Cap": 45.0, "Mid Cap": 10.0, "Debt": 40.0, "Other": 5.0},
-    "gold": {},
-    "debt": {},
+    "gold": {"Gold": 100.0},
+    "debt": {"Debt": 100.0},
 }
 
 
