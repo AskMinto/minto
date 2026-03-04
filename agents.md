@@ -64,12 +64,14 @@
   - `app/main.py`: FastAPI app with CORS, 8 routers registered.
   - `app/routers/`: API endpoints (risk, holdings, cas, chats, market, dashboard, zerodha, financial_profiles).
   - `app/services/`: Business logic (portfolio, fund_weights, cas_parser, gemini, research_agent, guardrails, mem0, yfinance_service, mfapi_service, kite_service).
+  - `app/prompts.yaml`: Single source of truth for all prompts, agent instructions, guardrail patterns, and agent config.
+  - `app/core/`: config.py (env loader), auth.py (JWT verification), prompts.py (YAML prompt loader).
   - `scripts/`: Utility scripts (backfill_holdings.py for enriching holdings with missing sector/mcap data).
-  - `app/core/`: config.py (env loader) + auth.py (JWT verification via Supabase endpoint).
   - `app/db/`: Supabase client wrapper.
   - `tests/`: pytest test files (guardrails, portfolio, yfinance, cas_parser, mfapi).
   - `sql/`: schema.sql (8 tables + RLS), migrations (001_mf_support.sql), seed data.
   - `Dockerfile`: Python 3.13-slim, uvicorn on port 8080.
+- `summaries/`: Documentation (chat-agent-context-flow.md — detailed breakdown of how context is assembled and passed to the chat agent).
 - `assets/`: Fonts (SpaceMono) and images (icon, splash, minto.png).
 - `exper/`: Experimental scripts (yfinance probe).
 - `ios/`: iOS native project artifacts.
@@ -112,8 +114,10 @@
 - **CAS parsing**: `services/cas_parser.py` extracts holdings from CAS PDFs and maps ISINs to tickers via Yahoo Finance search + MFAPI resolution.
 - **Mutual fund data**: `services/mfapi_service.py` provides scheme search, NAV retrieval, NAV history, and ISIN-to-scheme resolution with TTL caching.
 - **Zerodha integration**: `services/kite_service.py` handles OAuth flow, fetches holdings/positions/MF from Kite Connect, maps to Minto schema.
-- **Chat with research agent**: Agno-based research agent (`services/research_agent.py`) with YFinance, Newspaper4k, DuckDuckGo tools, custom MF NAV tool, market overview tool, and instrument search tool. Extracts inline widgets (price_summary, news_summary) from tool execution results.
-- **Chat guardrails**: `services/guardrails.py` blocks 24 investment advice patterns and appends disclaimers.
+- **Chat with research agent**: Agno-based research agent (`services/research_agent.py`) with YFinance, Newspaper4k, DuckDuckGo tools, custom MF NAV tool, market overview tool, and instrument search tool. Extracts inline widgets (price_summary with day change data, news_summary) from tool execution results. Agent uses IST timezone (`Asia/Kolkata`).
+- **Chat widgets**: Price widgets show day change with colored arrows (green ↑ / red ↓) and percentage. Multiple widgets are aggregated into single collated views with "+N more" buttons that open modals. News widgets show 2 inline with expandable modal for the rest.
+- **Chat guardrails**: `services/guardrails.py` blocks 15 investment advice patterns and appends disclaimers.
+- **Prompt management**: All prompts, agent instructions, guardrail patterns, and agent config are externalized in `backend/app/prompts.yaml`. The `app/core/prompts.py` module provides a `prompts` singleton that loads and templates the YAML. Prompts can be edited without touching Python code.
 - **SSE streaming**: Chat supports real-time streaming — mobile uses XHR-based SSE (React Native compatibility), web uses fetch ReadableStream.
 - **Memory**: Optional Mem0 integration for storing/retrieving user conversation memory.
 - **Fund classifier**: Client-side mutual fund type classification (index/equity/debt/arbitrage/gold/silver) by regex patterns in `web-app/src/lib/fund-classifier.ts`.
@@ -134,12 +138,13 @@
   - yfinance_service uses TTL caching: 30s quotes, 60s search, 300s news, 600s failed symbol cache.
   - mfapi_service uses TTL caching for NAV and search results.
 - **Guardrails**:
-  - `services/guardrails.py` blocks investment advice phrases and appends disclaimers.
+  - `services/guardrails.py` blocks investment advice phrases and appends disclaimers. Patterns defined in `prompts.yaml`.
 - **Styling**:
-  - Mobile: Custom `Theme.ts` design system (colors, radii, fonts), `StyleSheet.create`, glassmorphism (`rgba(255,255,255,0.55)`), green nature palette (accent `#3d5a3e`).
-  - Web: Tailwind CSS v4 with custom `@theme` colors matching mobile palette, `glass-card` CSS utility.
+  - Mobile: Custom `Theme.ts` design system (colors, radii, fonts), `StyleSheet.create`, glassmorphism (`rgba(255,255,255,0.55)`), animated gradient background (12s breathing cycle), green nature palette (accent `#3d5a3e`).
+  - Web: Tailwind CSS v4 with custom `@theme` colors matching mobile palette. Three glassmorphism tiers in `globals.css`: `glass-card` (standard, 0.25 opacity, 20px blur), `glass-elevated` (sidebar/chat input, 0.55 opacity, 24px blur), `glass-subtle` (nested elements, 0.18 opacity, 14px blur). Animated gradient background (60s breathing cycle via `background-position` animation on oversized gradient). Layout uses `h-screen overflow-hidden` to pin chat input at bottom with scrollable message area.
 - **Configuration**:
   - `.env` + `backend/app/core/config.py` loads all backend config (also sets `GOOGLE_API_KEY` for Agno).
+  - `backend/app/prompts.yaml` is the single source of truth for all prompts, instructions, guardrail patterns, and agent config (model, temperature, timezone, limits).
   - Mobile reads `EXPO_PUBLIC_*` vars.
   - Web reads from `web-app/.env.local`.
 - **API proxying** (web): Next.js rewrites `/api/proxy/*` → backend URL to avoid CORS issues.
@@ -191,10 +196,10 @@
 
 ## 11. Areas of Complexity
 - **CAS PDF parsing**: Parsing PDFs can fail and falls back to raw text extraction; ISIN-to-ticker mapping uses both Yahoo Finance and MFAPI and may be incomplete.
-- **Portfolio analytics**: Live pricing depends on Yahoo Finance (equities) and MFAPI (mutual funds); caching and normalization logic in both services is nuanced. Look-through analysis distributes MF values across constituent sectors using hardcoded index weights or category heuristics.
+- **Portfolio analytics**: Live pricing depends on Yahoo Finance (equities) and MFAPI (mutual funds); caching and normalization logic in both services is nuanced. Look-through analysis distributes MF values across constituent sectors using hardcoded index weights or category heuristics. Dashboard shows three visualization tiers: asset class bar (Equity/Debt/Gold & Commodity), sector donut (with look-through, small slices <2% grouped as Others), and mcap donut (Large/Mid/Small Cap + Gold/Debt for non-equity funds). Concentration risk flags use fund names (not ISINs) and look-through sector splits.
 - **CAS scheme_code mapping**: CAS-imported MF scheme_codes can be stale/mismatched. The backfill script and fund_weights service prioritize the fund name stored in the DB over MFAPI scheme_code lookups. MFAPI's ISIN data is also unreliable for resolving to correct funds.
-- **Research agent**: Agno-based agent with multiple tool integrations; widget extraction from tool results requires specific output format parsing.
-- **Chat guardrails**: 24 blocked phrase patterns and disclaimer appending can affect response quality.
+- **Research agent**: Agno-based agent with multiple tool integrations; widget extraction from tool results requires specific output format parsing. Price widgets now include day change data from `get_quote()`.
+- **Chat guardrails**: 15 blocked phrase patterns and disclaimer appending can affect response quality. All patterns defined in `prompts.yaml`.
 - **Financial profiling wizard**: 1589-line 17-step conversational flow with complex financial ratio computations; tightly coupled UI + calculation logic.
 - **Auth flow**: Three clients (mobile, web, backend) must stay in sync with Supabase auth and RLS policies. Web uses SSR auth (@supabase/ssr) with middleware session refresh.
 - **Zerodha integration**: OAuth popup flow, token management, mapping Kite holdings schema to Minto holdings schema.
