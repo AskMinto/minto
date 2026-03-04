@@ -31,17 +31,17 @@ body {
   z-index: -1;
   background: linear-gradient(
     160deg,
-    #f0f4ef 0%,
+    #d4dcc8 0%,
     #9ebf9c 14%,
-    #eaf0e8 28%,
+    #c8d5c0 28%,
     #8cac8a 42%,
-    #f0f4ef 56%,
+    #d4dcc8 56%,
     #7b9f7a 70%,
-    #eaf0e8 84%,
+    #c8d5c0 84%,
     #9ebf9c 100%
   );
   background-size: 300% 300%;
-  animation: gradientBreath 16s ease-in-out infinite;
+  animation: gradientBreath 60s ease-in-out infinite;
 }
 
 @keyframes gradientBreath {
