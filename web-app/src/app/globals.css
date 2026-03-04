@@ -24,20 +24,30 @@ body {
   min-height: 100vh;
 }
 
-/* Animated gradient background — matches mobile's breathing animation */
+/* Animated gradient background — smooth breathing via background-position */
 .animated-gradient-bg {
   position: fixed;
   inset: 0;
   z-index: -1;
-  background: linear-gradient(160deg, #f0f4ef 0%, #9ebf9c 45%, #eaf0e8 100%);
-  animation: gradientBreath 12s ease-in-out infinite;
+  background: linear-gradient(
+    160deg,
+    #f0f4ef 0%,
+    #9ebf9c 14%,
+    #eaf0e8 28%,
+    #8cac8a 42%,
+    #f0f4ef 56%,
+    #7b9f7a 70%,
+    #eaf0e8 84%,
+    #9ebf9c 100%
+  );
+  background-size: 300% 300%;
+  animation: gradientBreath 16s ease-in-out infinite;
 }
 
 @keyframes gradientBreath {
-  0%   { background: linear-gradient(160deg, #f0f4ef 0%, #9ebf9c 45%, #eaf0e8 100%); }
-  33%  { background: linear-gradient(160deg, #eaf0e8 0%, #8cac8a 45%, #f0f4ef 100%); }
-  66%  { background: linear-gradient(160deg, #f0f4ef 0%, #7b9f7a 45%, #eaf0e8 100%); }
-  100% { background: linear-gradient(160deg, #f0f4ef 0%, #9ebf9c 45%, #eaf0e8 100%); }
+  0%   { background-position: 0% 0%; }
+  50%  { background-position: 100% 100%; }
+  100% { background-position: 0% 0%; }
 }
 
 /* Glassmorphism card utility */
