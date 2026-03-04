@@ -18,6 +18,13 @@ function fmt(n: number | string | null | undefined) {
 function pct(n: number) {
   return isNaN(n) || !isFinite(n) ? "—" : `${n.toFixed(1)}%`;
 }
+function fmtUsd(n: number | string | null | undefined) {
+  if (n === "" || n === undefined || n === null || isNaN(Number(n))) return "—";
+  const num = Number(n);
+  if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`;
+  if (num >= 1000) return `$${(num / 1000).toFixed(0)}K`;
+  return `$${num.toLocaleString("en-US")}`;
+}
 
 /* ─── Steps Definition ───────────────────────────────────────── */
 const STEPS: { id: string; q: string | ((d: Record<string, any>) => string) }[] = [
@@ -202,6 +209,16 @@ export default function FinancialProfilePage() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  const [usdRate, setUsdRate] = useState<number>(85);
+  useEffect(() => {
+    fetch("https://api.exchangerate-api.com/v4/latest/USD")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.rates?.INR) setUsdRate(data.rates.INR);
+      })
+      .catch(() => {});
+  }, []);
+
   const [d, setD] = useState<Record<string, any>>({
     name: "",
     age: "",
@@ -245,8 +262,11 @@ export default function FinancialProfilePage() {
     healthInsuranceCover: "",
     hasEsops: null,
     esopCompanyType: "",
+    esopCurrency: "inr" as "inr" | "usd",
     esopVestedValue: "",
+    esopVestedUsd: "",
     esopUnvestedValue: "",
+    esopUnvestedUsd: "",
     homeValue: "",
     carValue: "",
     goldPhysical: "",
@@ -261,7 +281,9 @@ export default function FinancialProfilePage() {
     cashBank: "",
     otherInvestments: "",
     hasIntlExposure: null,
+    intlCurrency: "inr" as "inr" | "usd",
     intlAssets: "",
+    intlAssetsUsd: "",
     goals: [],
     comfortLevel: null,
   });
@@ -874,7 +896,9 @@ export default function FinancialProfilePage() {
         </div>
       );
 
-    if (sid === "esops")
+    if (sid === "esops") {
+      const isEsopUsd = d.esopCurrency === "usd";
+      const esopPrefix = isEsopUsd ? "$" : "₹";
       return (
         <div style={S.inputPanel}>
           <ChoiceIn
@@ -891,18 +915,87 @@ export default function FinancialProfilePage() {
                 <span style={S.miniLabel}>Company type</span>
                 <ChoiceIn
                   value={d.esopCompanyType}
-                  onChange={(v) => set("esopCompanyType", v)}
+                  onChange={(v) => {
+                    set("esopCompanyType", v);
+                    if (v === "foreign") {
+                      set("esopCurrency", "usd");
+                    } else {
+                      set("esopCurrency", "inr");
+                    }
+                  }}
                   options={[
                     { val: "listed", label: "Listed (NSE/BSE)" },
+                    { val: "foreign", label: "Foreign MNC (US-listed)" },
                     { val: "unlisted", label: "Unlisted / Pre-IPO" },
                     { val: "startup", label: "Early-stage startup" },
                   ]}
                 />
               </div>
+              {d.esopCompanyType === "foreign" && (
+                <div style={S.miniSection}>
+                  <span style={S.miniLabel}>Enter values in</span>
+                  <ChoiceIn
+                    value={d.esopCurrency}
+                    onChange={(v) => {
+                      set("esopCurrency", v);
+                      if (v === "usd") {
+                        set("esopVestedValue", d.esopVestedUsd ? Math.round(Number(d.esopVestedUsd) * usdRate) : d.esopVestedValue);
+                        set("esopUnvestedValue", d.esopUnvestedUsd ? Math.round(Number(d.esopUnvestedUsd) * usdRate) : d.esopUnvestedValue);
+                      } else {
+                        set("esopVestedUsd", "");
+                        set("esopUnvestedUsd", "");
+                      }
+                    }}
+                    options={[
+                      { val: "usd", label: "$ USD" },
+                      { val: "inr", label: "₹ INR" },
+                    ]}
+                  />
+                </div>
+              )}
               <div style={S.fieldRow}>
-                <NumIn label="Vested value" {...numProps("esopVestedValue")} placeholder="0" sub="(can sell today, market value)" />
-                <NumIn label="Unvested value" {...numProps("esopUnvestedValue")} placeholder="0" sub="(locked, estimated)" />
+                <NumIn
+                  label="Vested value"
+                  value={isEsopUsd ? d.esopVestedUsd : d.esopVestedValue}
+                  onChange={(v) => {
+                    if (isEsopUsd) {
+                      set("esopVestedUsd", v);
+                      set("esopVestedValue", v === "" ? "" : Math.round(Number(v) * usdRate));
+                    } else {
+                      set("esopVestedValue", v);
+                    }
+                  }}
+                  placeholder="0"
+                  prefix={esopPrefix}
+                  sub="(can sell today, market value)"
+                />
+                <NumIn
+                  label="Unvested value"
+                  value={isEsopUsd ? d.esopUnvestedUsd : d.esopUnvestedValue}
+                  onChange={(v) => {
+                    if (isEsopUsd) {
+                      set("esopUnvestedUsd", v);
+                      set("esopUnvestedValue", v === "" ? "" : Math.round(Number(v) * usdRate));
+                    } else {
+                      set("esopUnvestedValue", v);
+                    }
+                  }}
+                  placeholder="0"
+                  prefix={esopPrefix}
+                  sub="(locked, estimated)"
+                />
               </div>
+              {isEsopUsd && (n("esopVestedValue") > 0 || n("esopUnvestedValue") > 0) && (
+                <div style={S.liveHint}>
+                  ≈ Vested: {fmt(n("esopVestedValue"))} · Unvested: {fmt(n("esopUnvestedValue"))}{" "}
+                  <span style={{ color: "#8a9a8c" }}>at $1 = ₹{usdRate.toFixed(1)}</span>
+                </div>
+              )}
+              {d.esopCompanyType === "foreign" && (
+                <div style={S.liveHint}>
+                  Foreign-company ESOPs carry currency risk on top of single-stock concentration. We'll factor both into your allocation.
+                </div>
+              )}
               {d.esopCompanyType === "startup" && (
                 <div style={S.liveHint}>
                   Startup ESOPs are illiquid and speculative — we won't count unvested value as a reliable asset.
@@ -919,12 +1012,15 @@ export default function FinancialProfilePage() {
             <SubmitBtn
               onClick={() => {
                 if (!d.hasEsops) return goNext("No ESOPs or stock options");
-                const esopLabels: Record<string, string> = { listed: "Listed", unlisted: "Unlisted", startup: "Startup" };
+                const esopLabels: Record<string, string> = { listed: "Listed", unlisted: "Unlisted", startup: "Startup", foreign: "Foreign MNC" };
                 const parts = [
                   `${esopLabels[d.esopCompanyType as string] || ""} ESOPs`,
                 ];
                 if (n("esopVestedValue")) parts.push(`Vested: ${fmt(n("esopVestedValue"))}`);
                 if (n("esopUnvestedValue")) parts.push(`Unvested: ${fmt(n("esopUnvestedValue"))}`);
+                if (isEsopUsd && (n("esopVestedUsd") || n("esopUnvestedUsd"))) {
+                  parts.push(`(entered in USD)`);
+                }
                 goNext(parts.join(" · "));
               }}
               disabled={d.hasEsops && !d.esopCompanyType}
@@ -932,6 +1028,7 @@ export default function FinancialProfilePage() {
           )}
         </div>
       );
+    }
 
     if (sid === "assets")
       return (
@@ -1012,7 +1109,9 @@ export default function FinancialProfilePage() {
         </div>
       );
 
-    if (sid === "intl")
+    if (sid === "intl") {
+      const isIntlUsd = d.intlCurrency === "usd";
+      const intlPrefix = isIntlUsd ? "$" : "₹";
       return (
         <div style={S.inputPanel}>
           <ChoiceIn
@@ -1023,16 +1122,66 @@ export default function FinancialProfilePage() {
               { val: false, label: "No international exposure" },
             ]}
           />
-          {d.hasIntlExposure && <NumIn label="Total value in ₹" {...numProps("intlAssets")} placeholder="0" sub="(exclude ESOPs already entered above)" />}
+          {d.hasIntlExposure && (
+            <>
+              <div style={{ ...S.liveHint, fontStyle: "italic", marginBottom: 2 }}>
+                Excluding any ESOPs / RSUs already entered in the previous step.
+              </div>
+              <div style={S.miniSection}>
+                <span style={S.miniLabel}>Enter value in</span>
+                <ChoiceIn
+                  value={d.intlCurrency}
+                  onChange={(v) => {
+                    set("intlCurrency", v);
+                    if (v === "usd") {
+                      set("intlAssets", d.intlAssetsUsd ? Math.round(Number(d.intlAssetsUsd) * usdRate) : d.intlAssets);
+                    } else {
+                      set("intlAssetsUsd", "");
+                    }
+                  }}
+                  options={[
+                    { val: "inr", label: "₹ INR" },
+                    { val: "usd", label: "$ USD" },
+                  ]}
+                />
+              </div>
+              <NumIn
+                label={isIntlUsd ? "Total value in $" : "Total value in ₹"}
+                value={isIntlUsd ? d.intlAssetsUsd : d.intlAssets}
+                onChange={(v) => {
+                  if (isIntlUsd) {
+                    set("intlAssetsUsd", v);
+                    set("intlAssets", v === "" ? "" : Math.round(Number(v) * usdRate));
+                  } else {
+                    set("intlAssets", v);
+                  }
+                }}
+                placeholder="0"
+                prefix={intlPrefix}
+                sub="(US stocks, S&P 500 funds, foreign property, NRE deposits)"
+              />
+              {isIntlUsd && n("intlAssets") > 0 && (
+                <div style={S.liveHint}>
+                  ≈ {fmt(n("intlAssets"))}{" "}
+                  <span style={{ color: "#8a9a8c" }}>at $1 = ₹{usdRate.toFixed(1)}</span>
+                </div>
+              )}
+            </>
+          )}
           {d.hasIntlExposure !== null && (
             <SubmitBtn
-              onClick={() =>
-                goNext(d.hasIntlExposure ? `International: ${fmt(n("intlAssets"))}` : "No international exposure")
-              }
+              onClick={() => {
+                if (!d.hasIntlExposure) return goNext("No international exposure");
+                const msg = isIntlUsd && n("intlAssetsUsd")
+                  ? `International: ${fmtUsd(n("intlAssetsUsd"))} (${fmt(n("intlAssets"))})`
+                  : `International: ${fmt(n("intlAssets"))}`;
+                goNext(msg);
+              }}
             />
           )}
         </div>
       );
+    }
 
     if (sid === "goals")
       return (
