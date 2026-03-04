@@ -35,16 +35,7 @@ def extract_prices(quote: Any) -> tuple[float | None, float | None]:
     return ltp, prev
 
 
-_ASSET_CLASS_MAP = {
-    "Debt": "Debt",
-    "Commodity": "Gold & Commodity",
-    "Gold": "Gold & Commodity",
-}
 
-
-def _sector_to_asset_class(sector: str) -> str:
-    """Map a sector label to a high-level asset class."""
-    return _ASSET_CLASS_MAP.get(sector, "Equity")
 
 
 def compute_portfolio(holdings: list[dict[str, Any]]) -> dict[str, Any]:
@@ -109,21 +100,19 @@ def compute_portfolio(holdings: list[dict[str, Any]]) -> dict[str, Any]:
             )
             sw = weights.get("sector_weights", {})
             mw = weights.get("mcap_weights", {})
+            fund_asset_class = weights.get("asset_class", "Equity Funds")
             if sw:
                 for s_label, s_pct in sw.items():
                     alloc = value * (s_pct / 100.0)
                     sector_totals[s_label] += alloc
-                    # Map sector to asset class
-                    ac = _sector_to_asset_class(s_label)
-                    asset_class_totals[ac] += alloc
             else:
                 sector_totals[holding.get("sector") or "Unknown"] += value
-                asset_class_totals["Equity"] += value
             if mw:
                 for m_label, m_pct in mw.items():
                     mcap_totals[m_label] += value * (m_pct / 100.0)
             else:
                 mcap_totals[holding.get("mcap_bucket") or "Unknown"] += value
+            asset_class_totals[fund_asset_class] += value
         else:
             sector = holding.get("sector") or "Unknown"
             mcap = holding.get("mcap_bucket") or "Unknown"

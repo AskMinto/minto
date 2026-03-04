@@ -28,8 +28,13 @@ export const CHART_COLORS = [
 
 export const ASSET_CLASS_COLORS: Record<string, string> = {
   Equity: "#3d5a3e",
-  Debt: "#6a8fa0",
-  "Gold & Commodity": "#b8943e",
+  "Equity Funds": "#5c7c6f",
+  "Debt Funds": "#6a8fa0",
+  "Cash & Liquid": "#8bb0c4",
+  Gold: "#b8943e",
+  Silver: "#9a9a9a",
+  "Arbitrage Funds": "#7b9f7a",
+  "Hybrid Funds": "#8b7355",
   Others: "#9a7daa",
 };
 

@@ -147,8 +147,23 @@ _CATEGORY_SECTOR_MAP: dict[str, dict[str, float]] = {
     "gold": {
         "Commodity": 100.0,
     },
+    "silver": {
+        "Commodity": 100.0,
+    },
     "debt": {
         "Debt": 100.0,
+    },
+    "liquid": {
+        "Cash": 100.0,
+    },
+    "arbitrage": {
+        "Financial Services": 30.0,
+        "Technology": 10.0,
+        "Energy": 10.0,
+        "FMCG": 8.0,
+        "Automobile": 7.0,
+        "Healthcare": 5.0,
+        "Other": 30.0,
     },
 }
 
@@ -159,20 +174,51 @@ _CATEGORY_MCAP_MAP: dict[str, dict[str, float]] = {
     "flexi_cap": {"Large Cap": 55.0, "Mid Cap": 30.0, "Small Cap": 15.0},
     "hybrid": {"Large Cap": 45.0, "Mid Cap": 10.0, "Debt": 40.0, "Other": 5.0},
     "gold": {"Gold": 100.0},
+    "silver": {"Silver": 100.0},
     "debt": {"Debt": 100.0},
+    "liquid": {"Cash": 100.0},
+    "arbitrage": {"Large Cap": 100.0},
+}
+
+
+# Maps internal category key → asset class label for the allocation bar
+_CATEGORY_ASSET_CLASS: dict[str, str] = {
+    "large_cap": "Equity Funds",
+    "mid_cap": "Equity Funds",
+    "small_cap": "Equity Funds",
+    "flexi_cap": "Equity Funds",
+    "hybrid": "Hybrid Funds",
+    "gold": "Gold",
+    "silver": "Silver",
+    "debt": "Debt Funds",
+    "liquid": "Cash & Liquid",
+    "arbitrage": "Arbitrage Funds",
 }
 
 
 def _detect_category(name: str) -> str:
     """Classify a mutual fund into a category key from its name."""
     nl = name.lower()
-    if any(kw in nl for kw in ["gold", "silver", "commodity"]):
+    # Commodities — gold, silver, commodity
+    if any(kw in nl for kw in ["silver"]):
+        return "silver"
+    if any(kw in nl for kw in ["gold", "commodity"]):
         return "gold"
-    if any(kw in nl for kw in ["debt", "bond", "gilt", "liquid", "overnight",
-                                 "money market", "floating", "banking and psu"]):
+    # Cash & liquid
+    if any(kw in nl for kw in ["liquid", "overnight", "money market"]):
+        return "liquid"
+    # Arbitrage
+    if any(kw in nl for kw in ["arbitrage"]):
+        return "arbitrage"
+    # Debt
+    if any(kw in nl for kw in ["debt", "bond", "gilt", "floating",
+                                 "banking and psu", "corporate bond",
+                                 "credit risk", "dynamic bond"]):
         return "debt"
+    # Hybrid
     if any(kw in nl for kw in ["hybrid", "balanced", "equity savings"]):
         return "hybrid"
+    # Equity sub-categories
     if any(kw in nl for kw in ["small cap", "smallcap", "small-cap"]):
         return "small_cap"
     if any(kw in nl for kw in ["mid cap", "midcap", "mid-cap", "emerging"]):
@@ -183,7 +229,7 @@ def _detect_category(name: str) -> str:
     if any(kw in nl for kw in ["large cap", "largecap", "large-cap",
                                  "bluechip", "blue chip"]):
         return "large_cap"
-    # Default: treat as flexi cap (diversified)
+    # Default: treat as flexi cap (diversified equity)
     return "flexi_cap"
 
 
@@ -205,10 +251,13 @@ def get_fund_weights(
     # 1. Check if it's tracking a known index
     for pattern, sectors, mcap in _INDEX_PATTERNS:
         if pattern.search(name):
-            index_name = pattern.pattern.replace(r"\s*", " ").replace(r"\b", "")
+            # Determine asset class from fund name even for index funds
+            combined = f"{scheme_category or ''} {name}"
+            category = _detect_category(combined)
             return {
                 "sector_weights": sectors,
                 "mcap_weights": mcap,
+                "asset_class": _CATEGORY_ASSET_CLASS.get(category, "Equity Funds"),
                 "source": "index_weights",
             }
 
@@ -219,5 +268,6 @@ def get_fund_weights(
     return {
         "sector_weights": _CATEGORY_SECTOR_MAP.get(category, {}),
         "mcap_weights": _CATEGORY_MCAP_MAP.get(category, {}),
+        "asset_class": _CATEGORY_ASSET_CLASS.get(category, "Equity Funds"),
         "source": "category_heuristic",
     }
