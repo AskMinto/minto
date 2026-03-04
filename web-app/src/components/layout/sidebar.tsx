@@ -13,7 +13,6 @@ import {
   Search,
   Settings,
   LogOut,
-  Plus,
   TrendingUp,
   TrendingDown,
   Menu,
@@ -58,16 +57,6 @@ export function Sidebar() {
       <div className="p-4 flex items-center gap-3">
         <Image src="/minto.png" alt="Minto" width={32} height={32} />
         <span className="font-bold text-minto-text text-lg">Minto</span>
-      </div>
-
-      {/* New Chat */}
-      <div className="px-3 mb-2">
-        <Link
-          href="/chat"
-          className="flex items-center gap-2 w-full px-4 py-2.5 rounded-xl bg-minto-accent text-white text-sm font-medium hover:opacity-90 transition-opacity"
-        >
-          <Plus size={16} /> New Chat
-        </Link>
       </div>
 
       {/* Nav */}
