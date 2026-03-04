@@ -180,7 +180,7 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
         except (json.JSONDecodeError, TypeError):
             result = result_str
 
-        # Stock price → add to price_items
+        # Stock price → add to price_items with change data
         if name == "get_current_stock_price":
             price = None
             symbol = args.get("symbol", "")
@@ -193,13 +193,30 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
                     pass
             if price:
                 display_symbol = symbol
+                exchange = None
                 for suffix in (".NS", ".BO", ".ns", ".bo"):
                     if display_symbol.endswith(suffix):
+                        exchange = "BSE" if suffix.upper() == ".BO" else "NSE"
                         display_symbol = display_symbol[:-len(suffix)]
                         break
+                # Fetch previous close for change calculation
+                change = None
+                change_pct = None
+                try:
+                    from .yfinance_service import get_quote
+                    from .portfolio import extract_prices
+                    quote = get_quote(symbol=display_symbol, exchange=exchange)
+                    _, prev_close = extract_prices(quote)
+                    if prev_close and prev_close > 0:
+                        change = price - prev_close
+                        change_pct = (change / prev_close) * 100
+                except Exception:
+                    pass
                 price_items.append({
                     "symbol": display_symbol,
                     "price": price,
+                    "change": change,
+                    "change_pct": change_pct,
                     "type": "equity",
                 })
 
