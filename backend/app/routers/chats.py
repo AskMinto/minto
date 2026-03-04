@@ -188,15 +188,20 @@ def _build_user_prompt(message: str, memory: str, portfolio: dict) -> str:
             holdings_lines.append(f"  [EQ] {name}")
     holdings_block = "\n".join(holdings_lines) if holdings_lines else "  No holdings"
 
-    memory_block = f"Previous conversation context:\n{memory}\n\n" if memory else ""
+    memory_block = (
+        f"--- LONG-TERM MEMORY (past conversations) ---\n{memory}\n\n"
+        if memory else ""
+    )
 
     return (
         f"{memory_block}"
-        f"Portfolio summary: {portfolio_summary}\n"
-        f"Holdings:\n{holdings_block}\n"
-        f"(For [EQ] holdings: use get_current_stock_price with .NS suffix. "
-        f"For [MF] holdings: use _get_mf_nav with the scheme_code.)\n\n"
-        f"User question: {message}"
+        f"--- CURRENT PORTFOLIO ---\n"
+        f"Summary: {portfolio_summary}\n"
+        f"Top holdings (no prices — you MUST call tools to get current prices):\n"
+        f"{holdings_block}\n"
+        f"Tool hints: [EQ] → get_current_stock_price with .NS suffix. "
+        f"[MF] → _get_mf_nav with the scheme_code.\n\n"
+        f"--- USER MESSAGE ---\n{message}"
     )
 
 
