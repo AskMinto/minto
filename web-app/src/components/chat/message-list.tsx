@@ -38,19 +38,46 @@ export function MessageList({ messages, sending }: Props) {
                 content={msg.content}
                 isStreaming={isEmptyAssistant}
               />
-              {msg.role === "assistant" && widgets.length > 0 && (
-                <div className="ml-11 -mt-3 mb-4">
-                  {widgets.map((w, wi) => {
-                    if ((w as { type: string }).type === "price_summary") {
-                      return <WidgetPrice key={wi} data={(w as { data: { items: [] } }).data} />;
+              {msg.role === "assistant" && widgets.length > 0 && (() => {
+                // Aggregate all price and news items across widgets
+                const allPrices: Record<string, unknown>[] = [];
+                const allNews: Record<string, unknown>[] = [];
+                const seenPriceKeys = new Set<string>();
+                const seenNewsTitles = new Set<string>();
+
+                for (const w of widgets) {
+                  const typed = w as { type: string; data?: { items?: Record<string, unknown>[] } };
+                  const items = typed.data?.items || [];
+                  if (typed.type === "price_summary") {
+                    for (const item of items) {
+                      const key = (item.symbol as string) || String(item.scheme_code) || "";
+                      if (key && !seenPriceKeys.has(key)) {
+                        seenPriceKeys.add(key);
+                        allPrices.push(item);
+                      }
                     }
-                    if ((w as { type: string }).type === "news_summary") {
-                      return <WidgetNews key={wi} data={(w as { data: { items: [] } }).data} />;
+                  } else if (typed.type === "news_summary") {
+                    for (const item of items) {
+                      const title = (item.title as string) || "";
+                      if (title && !seenNewsTitles.has(title)) {
+                        seenNewsTitles.add(title);
+                        allNews.push(item);
+                      }
                     }
-                    return null;
-                  })}
-                </div>
-              )}
+                  }
+                }
+
+                return (
+                  <div className="ml-11 -mt-3 mb-4">
+                    {allPrices.length > 0 && (
+                      <WidgetPrice data={{ items: allPrices as never[] }} />
+                    )}
+                    {allNews.length > 0 && (
+                      <WidgetNews data={{ items: allNews as never[] }} />
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           );
         })}
