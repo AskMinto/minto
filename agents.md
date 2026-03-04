@@ -63,7 +63,8 @@
 - `backend/`: FastAPI backend.
   - `app/main.py`: FastAPI app with CORS, 8 routers registered.
   - `app/routers/`: API endpoints (risk, holdings, cas, chats, market, dashboard, zerodha, financial_profiles).
-  - `app/services/`: Business logic (portfolio, cas_parser, gemini, research_agent, guardrails, mem0, yfinance_service, mfapi_service, kite_service).
+  - `app/services/`: Business logic (portfolio, fund_weights, cas_parser, gemini, research_agent, guardrails, mem0, yfinance_service, mfapi_service, kite_service).
+  - `scripts/`: Utility scripts (backfill_holdings.py for enriching holdings with missing sector/mcap data).
   - `app/core/`: config.py (env loader) + auth.py (JWT verification via Supabase endpoint).
   - `app/db/`: Supabase client wrapper.
   - `tests/`: pytest test files (guardrails, portfolio, yfinance, cas_parser, mfapi).
@@ -106,7 +107,8 @@
 - **Risk onboarding**: Users must accept a disclaimer and complete a risk quiz; stored in `risk_acknowledgments` and `risk_profiles` tables.
 - **Financial profiling**: 17-step conversational wizard computing NISM-prescribed financial ratios (DTI, solvency, liquidity, savings ratio), personal balance sheet, cash flow analysis, ESOP concentration analysis, suggested allocation, and goal mapping. Stored in `financial_profiles` table.
 - **Holdings**: Central portfolio records, created manually, via CAS upload, or Zerodha import; enriched with pricing data for analytics. Supports both equities (symbol/ISIN) and mutual funds (scheme_code/scheme_name/fund_house).
-- **Portfolio analytics**: `services/portfolio.py` computes totals, PnL, splits, top holdings, and concentration risk flags.
+- **Portfolio analytics**: `services/portfolio.py` computes totals, PnL, splits, top holdings, and concentration risk flags. Uses **look-through analysis** for mutual funds — instead of labelling an index fund as "Index", distributes its value across underlying sectors/mcap proportionally via `services/fund_weights.py`.
+- **Fund weights**: `services/fund_weights.py` provides sector and mcap weightage breakdowns for mutual funds. Hardcoded Nifty 50/Bank/Next 50 sector weights from NSE factsheets; category-based heuristic breakdowns (large/mid/small/flexi cap, hybrid, gold, debt) for active MFs.
 - **CAS parsing**: `services/cas_parser.py` extracts holdings from CAS PDFs and maps ISINs to tickers via Yahoo Finance search + MFAPI resolution.
 - **Mutual fund data**: `services/mfapi_service.py` provides scheme search, NAV retrieval, NAV history, and ISIN-to-scheme resolution with TTL caching.
 - **Zerodha integration**: `services/kite_service.py` handles OAuth flow, fetches holdings/positions/MF from Kite Connect, maps to Minto schema.
@@ -115,6 +117,8 @@
 - **SSE streaming**: Chat supports real-time streaming — mobile uses XHR-based SSE (React Native compatibility), web uses fetch ReadableStream.
 - **Memory**: Optional Mem0 integration for storing/retrieving user conversation memory.
 - **Fund classifier**: Client-side mutual fund type classification (index/equity/debt/arbitrage/gold/silver) by regex patterns in `web-app/src/lib/fund-classifier.ts`.
+- **Holdings backfill**: `backend/scripts/backfill_holdings.py` enriches holdings with missing sector/mcap_bucket data. Uses yfinance `Ticker.info` for equities (sector + marketCap → bucket) and fund name classification for mutual funds. Supports dry-run and `--apply` modes. Uses a service_role JWT (built from `SUPABASE_JWT_SECRET`) to bypass RLS.
+- **Zerodha import in onboarding**: The web financial profile wizard (step 14 — assets) includes an optional Zerodha import via popup OAuth. Imported holdings are listed with editable values and pre-fill the Direct Shares and Equity MF fields.
 
 ## 7. Development Patterns
 - **Auth pattern**:
@@ -187,7 +191,8 @@
 
 ## 11. Areas of Complexity
 - **CAS PDF parsing**: Parsing PDFs can fail and falls back to raw text extraction; ISIN-to-ticker mapping uses both Yahoo Finance and MFAPI and may be incomplete.
-- **Portfolio analytics**: Live pricing depends on Yahoo Finance (equities) and MFAPI (mutual funds); caching and normalization logic in both services is nuanced.
+- **Portfolio analytics**: Live pricing depends on Yahoo Finance (equities) and MFAPI (mutual funds); caching and normalization logic in both services is nuanced. Look-through analysis distributes MF values across constituent sectors using hardcoded index weights or category heuristics.
+- **CAS scheme_code mapping**: CAS-imported MF scheme_codes can be stale/mismatched. The backfill script and fund_weights service prioritize the fund name stored in the DB over MFAPI scheme_code lookups. MFAPI's ISIN data is also unreliable for resolving to correct funds.
 - **Research agent**: Agno-based agent with multiple tool integrations; widget extraction from tool results requires specific output format parsing.
 - **Chat guardrails**: 24 blocked phrase patterns and disclaimer appending can affect response quality.
 - **Financial profiling wizard**: 1589-line 17-step conversational flow with complex financial ratio computations; tightly coupled UI + calculation logic.
