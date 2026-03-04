@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
-import { apiPost } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 
 /* ─── Helpers ────────────────────────────────────────────────── */
@@ -265,6 +265,84 @@ export default function FinancialProfilePage() {
     goals: [],
     comfortLevel: null,
   });
+
+  /* ── Zerodha import state ── */
+  interface ZerodhaHolding {
+    symbol?: string;
+    isin?: string;
+    scheme_name?: string;
+    qty: number;
+    avg_cost: number;
+    asset_type: string;
+  }
+  const [zerodhaHoldings, setZerodhaHoldings] = useState<ZerodhaHolding[]>([]);
+  const [zerodhaLoading, setZerodhaLoading] = useState(false);
+  const [zerodhaError, setZerodhaError] = useState<string | null>(null);
+  const [zerodhaImported, setZerodhaImported] = useState(false);
+
+  const handleZerodhaImport = useCallback(async () => {
+    setZerodhaLoading(true);
+    setZerodhaError(null);
+    try {
+      const redirectUrl = window.location.origin + "/onboarding/financial-profile";
+      const { url } = await apiGet<{ url: string }>(
+        `/zerodha/login-url?app_redirect=${encodeURIComponent(redirectUrl)}`
+      );
+      const popup = window.open(url, "zerodha_login", "width=600,height=700");
+      if (!popup) {
+        setZerodhaError("Popup blocked — please allow popups and try again.");
+        setZerodhaLoading(false);
+        return;
+      }
+      const poll = setInterval(async () => {
+        try {
+          if (popup.closed) {
+            clearInterval(poll);
+            setZerodhaLoading(false);
+            return;
+          }
+          const popupUrl = popup.location?.href;
+          if (popupUrl && popupUrl.includes("request_token=")) {
+            const params = new URL(popupUrl).searchParams;
+            const token = params.get("request_token");
+            popup.close();
+            clearInterval(poll);
+            if (token) {
+              const res = await apiPost<{ holdings: ZerodhaHolding[]; count: number }>(
+                "/zerodha/callback",
+                { request_token: token }
+              );
+              setZerodhaHoldings(res.holdings);
+              setZerodhaImported(true);
+              // Pre-fill financial asset fields from imported data
+              prefillFromZerodha(res.holdings);
+            }
+            setZerodhaLoading(false);
+          }
+        } catch {
+          // Cross-origin — keep polling
+        }
+      }, 500);
+    } catch (err: unknown) {
+      setZerodhaError(err instanceof Error ? err.message : "Failed to connect");
+      setZerodhaLoading(false);
+    }
+  }, []);
+
+  const prefillFromZerodha = (holdings: ZerodhaHolding[]) => {
+    let equityTotal = 0;
+    let mfTotal = 0;
+    holdings.forEach((h) => {
+      const value = h.qty * h.avg_cost;
+      if (h.asset_type === "mutual_fund") mfTotal += value;
+      else equityTotal += value;
+    });
+    setD((prev) => ({
+      ...prev,
+      shares: equityTotal > 0 ? Math.round(equityTotal) : prev.shares,
+      equityMF: mfTotal > 0 ? Math.round(mfTotal) : prev.equityMF,
+    }));
+  };
 
   const [goalDraft, setGoalDraft] = useState<{ name: string; amount: string; years: string }>({
     name: "",
@@ -572,18 +650,13 @@ export default function FinancialProfilePage() {
             value={d.jobNature}
             onChange={(v) => {
               set("jobNature", v);
-              setTimeout(
-                () =>
-                  goNext(
-                    {
-                      salaried: "Salaried",
-                      business: "Self-employed / Business",
-                      freelance: "Freelance / Gig work",
-                      retired: "Retired / Pension",
-                    }[v]
-                  ),
-                200
-              );
+              const labels: Record<string, string> = {
+                salaried: "Salaried",
+                business: "Self-employed / Business",
+                freelance: "Freelance / Gig work",
+                retired: "Retired / Pension",
+              };
+              setTimeout(() => goNext(labels[v as string]), 200);
             }}
             options={[
               { val: "salaried", label: "Salaried" },
@@ -602,17 +675,12 @@ export default function FinancialProfilePage() {
             value={d.incomeCurrency}
             onChange={(v) => {
               set("incomeCurrency", v);
-              setTimeout(
-                () =>
-                  goNext(
-                    {
-                      inr: "Primarily INR",
-                      mixed: "Mixed INR + foreign",
-                      usd: "Primarily foreign currency",
-                    }[v]
-                  ),
-                200
-              );
+              const labels: Record<string, string> = {
+                inr: "Primarily INR",
+                mixed: "Mixed INR + foreign",
+                usd: "Primarily foreign currency",
+              };
+              setTimeout(() => goNext(labels[v as string]), 200);
             }}
             options={[
               { val: "inr", label: "₹ INR only" },
@@ -851,8 +919,9 @@ export default function FinancialProfilePage() {
             <SubmitBtn
               onClick={() => {
                 if (!d.hasEsops) return goNext("No ESOPs or stock options");
+                const esopLabels: Record<string, string> = { listed: "Listed", unlisted: "Unlisted", startup: "Startup" };
                 const parts = [
-                  `${{ listed: "Listed", unlisted: "Unlisted", startup: "Startup" }[d.esopCompanyType] || ""} ESOPs`,
+                  `${esopLabels[d.esopCompanyType as string] || ""} ESOPs`,
                 ];
                 if (n("esopVestedValue")) parts.push(`Vested: ${fmt(n("esopVestedValue"))}`);
                 if (n("esopUnvestedValue")) parts.push(`Unvested: ${fmt(n("esopUnvestedValue"))}`);
@@ -867,6 +936,50 @@ export default function FinancialProfilePage() {
     if (sid === "assets")
       return (
         <div style={S.inputPanel}>
+          {/* ── Zerodha import section ── */}
+          <div style={S.zdSection}>
+            {!zerodhaImported ? (
+              <>
+                <div style={S.zdHeader}>
+                  <span style={S.miniLabel}>Import from Zerodha</span>
+                  <span style={S.zdSub}>
+                    Connect your Zerodha account to auto-fill your equity and mutual fund holdings.
+                  </span>
+                </div>
+                <button
+                  onClick={handleZerodhaImport}
+                  disabled={zerodhaLoading}
+                  style={{ ...S.zdBtn, ...(zerodhaLoading ? S.submitDisabled : {}) }}
+                >
+                  {zerodhaLoading ? "Connecting…" : "Connect Zerodha"}
+                </button>
+                {zerodhaError && <span style={S.zdError}>{zerodhaError}</span>}
+              </>
+            ) : (
+              <>
+                <div style={S.zdHeader}>
+                  <span style={S.miniLabel}>
+                    Imported {zerodhaHoldings.length} holding{zerodhaHoldings.length !== 1 ? "s" : ""} from Zerodha
+                  </span>
+                </div>
+                <div style={S.zdList}>
+                  {zerodhaHoldings.map((h, i) => (
+                    <div key={i} style={S.zdRow}>
+                      <span style={S.zdName}>{h.scheme_name || h.symbol || h.isin || "—"}</span>
+                      <span style={S.zdMeta}>
+                        {h.qty} × {fmt(h.avg_cost)} = {fmt(h.qty * h.avg_cost)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div style={S.zdHint}>
+                  Values have been pre-filled below under Direct shares and Equity mutual funds. You can edit them.
+                </div>
+              </>
+            )}
+          </div>
+          <div style={S.zdDivider} />
+
           <span style={S.miniLabel}>Physical assets</span>
           <div style={S.fieldRow}>
             <NumIn label="Home (market value)" {...numProps("homeValue")} placeholder="0" />
@@ -1585,4 +1698,49 @@ const S: Record<string, CSSProperties> = {
   goalSMeta: { fontSize: 12, color: "#5a6b5c" },
   saveRow: { display: "flex", flexDirection: "column", alignItems: "flex-end", padding: "16px 8px 0" },
   saveHint: { fontSize: 12, color: "#5a6b5c" },
+  zdSection: {
+    background: "rgba(255,255,255,0.55)",
+    border: "1.5px solid rgba(61,90,62,0.15)",
+    borderRadius: 14,
+    padding: "14px 16px",
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+  },
+  zdHeader: { display: "flex", flexDirection: "column", gap: 4 },
+  zdSub: { fontSize: 12, color: "#7c8d7d", lineHeight: 1.4 },
+  zdBtn: {
+    alignSelf: "flex-start",
+    fontSize: 13,
+    fontWeight: 700,
+    color: "#f2f5ef",
+    background: "#3d5a3e",
+    border: "none",
+    borderRadius: 22,
+    padding: "9px 20px",
+    cursor: "pointer",
+    fontFamily: "inherit",
+    transition: "all 0.2s",
+  },
+  zdError: { fontSize: 12, color: "#c4483e" },
+  zdList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    maxHeight: 180,
+    overflowY: "auto",
+  },
+  zdRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "6px 10px",
+    background: "rgba(255,255,255,0.6)",
+    borderRadius: 8,
+    fontSize: 13,
+  },
+  zdName: { fontWeight: 600, color: "#2d3a2e", flex: 1, marginRight: 8, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  zdMeta: { color: "#5a6b5c", fontSize: 12, whiteSpace: "nowrap" },
+  zdHint: { fontSize: 12, color: "#3d8b4f", fontStyle: "italic", lineHeight: 1.4 },
+  zdDivider: { height: 1, background: "rgba(61,90,62,0.12)", margin: "4px 0" },
 };
