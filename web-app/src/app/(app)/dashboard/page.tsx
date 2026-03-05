@@ -13,14 +13,14 @@ import { FinancialProfileTab } from "@/components/dashboard/financial-profile-ta
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { RefreshCw, Plus, Upload } from "lucide-react";
+import { RefreshCw, Plus, Upload, Sparkles } from "lucide-react";
 import Link from "next/link";
 
 type Tab = "portfolio" | "balance-sheet";
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<Tab>("portfolio");
-  const { data, loading, error, refresh, analyzing, analyzeRisk } = useDashboard();
+  const { data, loading, error, refresh, analyzing, analyzeRisk, riskError } = useDashboard();
   const { data: profile, loading: profileLoading, error: profileError } = useFinancialProfile();
 
   if (loading) {
@@ -52,9 +52,14 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-2xl font-bold text-minto-text">Dashboard</h1>
           </div>
-          <Button onClick={analyzeRisk} variant="secondary" size="sm" disabled={analyzing}>
-            <RefreshCw size={14} className={analyzing ? "animate-spin" : ""} /> Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button onClick={refresh} variant="ghost" size="sm" title="Refresh data">
+              <RefreshCw size={14} />
+            </Button>
+            <Button onClick={analyzeRisk} variant="secondary" size="sm" disabled={analyzing}>
+              <Sparkles size={14} /> {analyzing ? "Analyzing…" : "Analyze Risk"}
+            </Button>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -121,7 +126,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Concentration risk */}
-            <ConcentrationRisk analysis={data.risk_analysis} analyzing={analyzing} />
+            <ConcentrationRisk analysis={data.risk_analysis} analyzing={analyzing} riskError={riskError} />
           </>
         )}
 

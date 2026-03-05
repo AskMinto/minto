@@ -43,6 +43,7 @@ export function useDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [riskError, setRiskError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -59,11 +60,12 @@ export function useDashboard() {
 
   const analyzeRisk = useCallback(async () => {
     setAnalyzing(true);
+    setRiskError(null);
     try {
       await apiPost("/dashboard/analyze-risk");
       await refresh();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Risk analysis failed");
+      setRiskError(err instanceof Error ? err.message : "Risk analysis failed");
     } finally {
       setAnalyzing(false);
     }
@@ -73,5 +75,5 @@ export function useDashboard() {
     refresh();
   }, [refresh]);
 
-  return { data, loading, error, refresh, analyzing, analyzeRisk };
+  return { data, loading, error, refresh, analyzing, analyzeRisk, riskError };
 }

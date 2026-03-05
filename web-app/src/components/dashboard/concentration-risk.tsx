@@ -18,6 +18,7 @@ import type { RiskAnalysis, ConcentrationFlag } from "@/hooks/use-dashboard";
 interface Props {
   analysis: RiskAnalysis | null;
   analyzing?: boolean;
+  riskError?: string | null;
 }
 
 const TYPE_ICON: Record<string, typeof TrendingDown> = {
@@ -78,7 +79,7 @@ function riskLevelLabel(level: RiskAnalysis["risk_level"]): string {
   }
 }
 
-export function ConcentrationRisk({ analysis, analyzing }: Props) {
+export function ConcentrationRisk({ analysis, analyzing, riskError }: Props) {
   /* Loading state */
   if (analyzing) {
     return (
@@ -89,13 +90,23 @@ export function ConcentrationRisk({ analysis, analyzing }: Props) {
     );
   }
 
+  /* Error state */
+  if (riskError) {
+    return (
+      <div className="glass-card p-8 flex flex-col items-center justify-center gap-2 text-center">
+        <AlertTriangle size={20} className="text-minto-negative" />
+        <p className="text-sm text-minto-negative">{riskError}</p>
+      </div>
+    );
+  }
+
   /* Empty state — never analyzed */
   if (!analysis) {
     return (
       <div className="glass-card p-8 flex flex-col items-center justify-center gap-2 text-center">
         <Sparkles size={20} className="text-minto-text-muted" />
         <p className="text-sm text-minto-text-muted">
-          Click refresh to run AI risk analysis
+          Click &quot;Analyze Risk&quot; to run AI portfolio analysis
         </p>
       </div>
     );
@@ -114,7 +125,7 @@ export function ConcentrationRisk({ analysis, analyzing }: Props) {
           <div
             className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold ${riskScoreColor(analysis.risk_level)}`}
           >
-            {analysis.risk_score}
+            {Math.round(analysis.risk_score)}
           </div>
         </div>
       </div>
