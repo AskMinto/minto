@@ -1,7 +1,24 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { apiGet } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
+
+export interface ConcentrationFlag {
+  type: "stock" | "sector" | "top_concentration" | "overlap" | "currency" | "esop";
+  label: string;
+  pct: number | null;
+  severity: "red" | "yellow" | "green";
+  why: string;
+}
+
+export interface RiskAnalysis {
+  risk_score: number;
+  risk_level: "low" | "moderate" | "high" | "very_high";
+  concentration_flags: ConcentrationFlag[];
+  diversification_notes: string[];
+  recommendations: string[];
+  summary: string;
+}
 
 interface DashboardData {
   totals: {
@@ -17,19 +34,15 @@ interface DashboardData {
   mcap_split: { label: string; value: number; pct: number }[];
   asset_split: { label: string; value: number; pct: number }[];
   asset_class_split: { label: string; value: number; pct: number }[];
-  concentration_flags: {
-    type: string;
-    label: string;
-    pct: number;
-    severity: string;
-    why: string;
-  }[];
+  concentration_flags: ConcentrationFlag[];
+  risk_analysis: RiskAnalysis | null;
 }
 
 export function useDashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -44,9 +57,21 @@ export function useDashboard() {
     }
   }, []);
 
+  const analyzeRisk = useCallback(async () => {
+    setAnalyzing(true);
+    try {
+      await apiPost("/dashboard/analyze-risk");
+      await refresh();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Risk analysis failed");
+    } finally {
+      setAnalyzing(false);
+    }
+  }, [refresh]);
+
   useEffect(() => {
     refresh();
   }, [refresh]);
 
-  return { data, loading, error, refresh };
+  return { data, loading, error, refresh, analyzing, analyzeRisk };
 }
