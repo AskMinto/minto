@@ -252,5 +252,19 @@ class Prompts:
     def agent_config(self) -> dict[str, Any]:
         return self._data["agent_config"]
 
+    # ── Risk Agent ───────────────────────────────────────
+
+    @property
+    def risk_agent_config(self) -> dict[str, Any]:
+        return self._data["risk_agent"]["config"]
+
+    @property
+    def risk_agent_description(self) -> str:
+        return self._data["risk_agent"]["description"].strip()
+
+    @property
+    def risk_agent_instructions(self) -> list[str]:
+        return self._data["risk_agent"]["instructions"]
+
 
 prompts = Prompts()
