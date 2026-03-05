@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useCallback } from "react";
 import { MessageBubble } from "./message-bubble";
 import { WidgetPrice } from "./widget-price";
 import { WidgetNews } from "./widget-news";
+import { Spinner } from "@/components/ui/spinner";
 
 interface ChatMessage {
   role: "user" | "assistant";
@@ -14,18 +15,66 @@ interface ChatMessage {
 interface Props {
   messages: ChatMessage[];
   sending: boolean;
+  onLoadOlder?: () => void;
+  loadingMore?: boolean;
+  hasMore?: boolean;
 }
 
-export function MessageList({ messages, sending }: Props) {
+export function MessageList({ messages, sending, onLoadOlder, loadingMore, hasMore }: Props) {
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const prevHeightRef = useRef(0);
+  const isInitialLoad = useRef(true);
 
+  // Auto-scroll to bottom on new messages (but not when loading older)
   useEffect(() => {
+    if (isInitialLoad.current) {
+      // On first load, scroll to bottom instantly
+      bottomRef.current?.scrollIntoView();
+      isInitialLoad.current = false;
+      return;
+    }
+    // If we loaded older messages, preserve scroll position
+    if (scrollRef.current && prevHeightRef.current > 0) {
+      const newHeight = scrollRef.current.scrollHeight;
+      const addedHeight = newHeight - prevHeightRef.current;
+      if (addedHeight > 0 && scrollRef.current.scrollTop < 100) {
+        scrollRef.current.scrollTop = addedHeight;
+        prevHeightRef.current = 0;
+        return;
+      }
+    }
+    // Otherwise scroll to bottom for new messages
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  // Detect scroll to top for loading older messages
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current || !onLoadOlder || !hasMore || loadingMore) return;
+    if (scrollRef.current.scrollTop < 80) {
+      prevHeightRef.current = scrollRef.current.scrollHeight;
+      onLoadOlder();
+    }
+  }, [onLoadOlder, hasMore, loadingMore]);
+
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-6">
+    <div ref={scrollRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-4 py-6">
       <div className="max-w-5xl mx-auto">
+        {/* Load more indicator */}
+        {hasMore && (
+          <div className="flex justify-center py-3">
+            {loadingMore ? (
+              <Spinner size={18} />
+            ) : (
+              <button
+                onClick={onLoadOlder}
+                className="text-xs text-minto-text-muted hover:text-minto-text-secondary transition-colors"
+              >
+                Load earlier messages
+              </button>
+            )}
+          </div>
+        )}
         {messages.map((msg, i) => {
           const widgets = (msg.metadata?.widgets || []) as Record<string, unknown>[];
           const isLast = i === messages.length - 1;

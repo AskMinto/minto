@@ -7,7 +7,7 @@ import { ChatInput } from "@/components/chat/chat-input";
 import { Spinner } from "@/components/ui/spinner";
 
 export default function ChatPage() {
-  const { messages, input, setInput, sendMessage, sending, loading } =
+  const { messages, input, setInput, sendMessage, sending, loading, loadOlder, loadingMore, hasMore } =
     useChat();
 
   const handleSend = () => sendMessage(input);
@@ -35,7 +35,13 @@ export default function ChatPage() {
         </>
       ) : (
         <>
-          <MessageList messages={messages} sending={sending} />
+          <MessageList
+            messages={messages}
+            sending={sending}
+            onLoadOlder={loadOlder}
+            loadingMore={loadingMore}
+            hasMore={hasMore}
+          />
           <ChatInput
             value={input}
             onChange={setInput}

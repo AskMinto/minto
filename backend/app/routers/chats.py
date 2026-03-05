@@ -109,25 +109,37 @@ def _get_or_create_thread(supabase, user_id: str) -> str:
 
 
 @router.get("/messages")
-def get_messages(user: UserContext = Depends(get_user_context)):
+def get_messages(
+    user: UserContext = Depends(get_user_context),
+    limit: int = 8,
+    before: str | None = None,
+):
+    """Fetch chat messages with cursor-based pagination.
+
+    Args:
+        limit: Number of messages to return (default 8 = ~4 pairs).
+        before: ISO timestamp cursor — return messages older than this.
+    """
     supabase = get_supabase_client(user.token)
     chat_id = _get_or_create_thread(supabase, user.user_id)
-    messages = (
+
+    query = (
         supabase.table("chat_messages")
         .select("*")
         .eq("chat_id", chat_id)
-        .order("created_at", desc=False)
+    )
+    if before:
+        query = query.lt("created_at", before)
+
+    result = (
+        query
+        .order("created_at", desc=True)
+        .limit(limit)
         .execute()
     )
-    # Log the last assistant message's metadata for debugging widget delivery
-    msgs = messages.data or []
-    for m in reversed(msgs):
-        if m.get("role") == "assistant":
-            meta = m.get("metadata", {})
-            widget_count = len(meta.get("widgets", []))
-            logger.info(f"GET /messages: last assistant metadata={meta}, widget_count={widget_count}")
-            break
-    return {"chat_id": chat_id, "messages": msgs}
+    msgs = list(reversed(result.data or []))
+    has_more = len(result.data or []) == limit
+    return {"chat_id": chat_id, "messages": msgs, "has_more": has_more}
 
 
 def _build_system_prompt(risk_profile: dict | None = None) -> str:
