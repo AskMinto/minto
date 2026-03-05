@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import threading
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
@@ -148,6 +151,34 @@ def callback(payload: CallbackPayload, user: UserContext = Depends(get_user_cont
         result = supabase.table("holdings").insert(row).execute()
         if result.data:
             inserted.append(result.data[0])
+
+    # Trigger risk analysis in background (non-blocking)
+    def _bg_risk_analysis(token: str, user_id: str):
+        try:
+            from ..services.risk_agent import run_risk_analysis
+            from ..services.portfolio import compute_portfolio
+            sb = get_supabase_client(token)
+            h = sb.table("holdings").select("*").eq("user_id", user_id).execute().data or []
+            portfolio = compute_portfolio(h)
+            fp = sb.table("financial_profiles").select("responses, metrics").eq("user_id", user_id).limit(1).execute()
+            profile = fp.data[0] if fp.data else None
+            analysis = run_risk_analysis(portfolio, profile)
+            sb.table("risk_analyses").upsert(
+                {
+                    "user_id": user_id,
+                    "analysis": analysis,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+                on_conflict="user_id",
+            ).execute()
+        except Exception:
+            pass  # Don't crash the import if analysis fails
+
+    threading.Thread(
+        target=_bg_risk_analysis,
+        args=(user.token, user.user_id),
+        daemon=True,
+    ).start()
 
     return {"holdings": inserted, "count": len(inserted)}
 
