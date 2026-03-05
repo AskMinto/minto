@@ -16,7 +16,7 @@ from ..services.gemini import generate_response, GeminiNotConfigured
 from ..services.guardrails import append_disclaimer, contains_blocked_phrase, safe_response
 from ..services.mem0 import add_memory, get_memory
 from ..services.portfolio import compute_portfolio
-from ..services.research_agent import run_research_agent, run_research_agent_stream, AgentNotConfigured
+from ..services.research_agent import run_research_agent, run_research_agent_stream, AgentNotConfigured, _make_profile_update_tool
 
 logger = logging.getLogger(__name__)
 
@@ -255,9 +255,12 @@ def send_message(
     prompt = _build_user_prompt(payload.content, memory, portfolio, financial_profile)
     system_prompt = _build_system_prompt(risk_profile)
 
+    profile_tool = _make_profile_update_tool(supabase, user.user_id)
+    extra_tools = [profile_tool]
+
     try:
         assistant_reply, widgets = run_research_agent(
-            system_prompt, prompt, chat_history=recent_history
+            system_prompt, prompt, chat_history=recent_history, extra_tools=extra_tools
         )
         if not assistant_reply:
             assistant_reply = ""
@@ -309,13 +312,16 @@ def send_message_stream(
     prompt = _build_user_prompt(payload.content, memory, portfolio, financial_profile)
     system_prompt = _build_system_prompt(risk_profile)
 
+    profile_tool = _make_profile_update_tool(supabase, user.user_id)
+    extra_tools = [profile_tool]
+
     def event_generator():
         full_content = ""
         widgets: list[dict] = []
         print("[MINTO] Stream starting")
         try:
             for event in run_research_agent_stream(
-                system_prompt, prompt, chat_history=recent_history
+                system_prompt, prompt, chat_history=recent_history, extra_tools=extra_tools
             ):
                 event_type = event.get("type", "")
 

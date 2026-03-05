@@ -14,6 +14,7 @@ from ..core.config import GEMINI_API_KEY
 from ..core.prompts import prompts
 from .mfapi_service import get_latest_nav as mf_get_nav, search_schemes
 from .yfinance_service import search as yf_search
+from .financial_profile import compute_metrics, ALL_UPDATABLE
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,85 @@ def _search_instrument(query: str) -> str:
     return json.dumps(equity_results + mf_results)
 
 
-def _build_agent(system_prompt: str, chat_history: list[dict] | None = None) -> Agent:
+def _make_profile_update_tool(supabase_client, user_id: str):
+    """Create a per-request tool for updating the user's financial profile."""
+
+    def _update_financial_profile(updates: str) -> str:
+        """Update the user's financial profile / balance sheet.
+
+        Args:
+            updates: JSON string of field:value pairs to update.
+                Valid fields include: grossSalary, housing, homeLoanEMI, homeLoanOut,
+                equityMF, shares, fd, cashBank, homeValue, carValue, goldPhysical,
+                hasLifeInsurance, lifeInsuranceCover, hasHealthInsurance, healthInsuranceCover,
+                entertainment, lifestyle, subscriptions, age, dependents, earningMembers,
+                and many more. Values should be numbers for financial fields.
+                For goals, pass the full goals array.
+
+        Returns:
+            Confirmation message with updated metrics summary.
+        """
+        try:
+            import json as _json
+            field_updates = _json.loads(updates)
+        except (TypeError, _json.JSONDecodeError):
+            return "Error: updates must be a valid JSON string of field:value pairs."
+
+        # Fetch current profile
+        result = (
+            supabase_client.table("financial_profiles")
+            .select("responses,metrics")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if not result.data:
+            return "Error: No financial profile found. The user needs to complete the financial profile questionnaire first."
+
+        current = result.data[0]
+        responses = current.get("responses", {})
+
+        # Apply updates — validate field names
+        updated_fields = []
+        for key, value in field_updates.items():
+            if key == "goals":
+                responses["goals"] = value
+                updated_fields.append("goals")
+            elif key in ALL_UPDATABLE:
+                responses[key] = value
+                updated_fields.append(key)
+            else:
+                return f"Error: '{key}' is not a valid field. Valid fields: {', '.join(sorted(ALL_UPDATABLE))}"
+
+        if not updated_fields:
+            return "No valid fields to update."
+
+        # Recompute metrics
+        new_metrics = compute_metrics(responses)
+
+        # Save back
+        from datetime import datetime, timezone
+        supabase_client.table("financial_profiles").update({
+            "responses": responses,
+            "metrics": new_metrics,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("user_id", user_id).execute()
+
+        # Return summary
+        fmt = lambda v: f"₹{v/100000:.1f}L" if v >= 100000 else f"₹{v:,.0f}" if v else "—"
+        return (
+            f"Updated: {', '.join(updated_fields)}. "
+            f"New metrics — Income: {fmt(new_metrics['total_income'])}/mo, "
+            f"Surplus: {fmt(new_metrics['monthly_surplus'])}/mo, "
+            f"Net worth: {fmt(new_metrics['net_worth'])}, "
+            f"DTI: {new_metrics['dti']:.1f}%, "
+            f"Savings ratio: {new_metrics['savings_ratio']:.1f}%"
+        )
+
+    return _update_financial_profile
+
+
+def _build_agent(system_prompt: str, chat_history: list[dict] | None = None, extra_tools: list | None = None) -> Agent:
     """Build an Agno Agent with tools for financial research."""
     if not GEMINI_API_KEY:
         raise AgentNotConfigured("GEMINI_API_KEY is not configured")
@@ -116,9 +195,12 @@ def _build_agent(system_prompt: str, chat_history: list[dict] | None = None) -> 
     )
 
     cfg = prompts.agent_config
+    all_tools = [yf_tools, newspaper_tools, ddg_tools, _get_mf_nav, _search_instrument, _get_market_overview]
+    if extra_tools:
+        all_tools.extend(extra_tools)
     agent = Agent(
         model=Gemini(id=cfg.get("model", "gemini-3-flash-preview"), temperature=cfg.get("temperature", 0.3)),
-        tools=[yf_tools, newspaper_tools, ddg_tools, _get_mf_nav, _search_instrument, _get_market_overview],
+        tools=all_tools,
         description=system_prompt,
         instructions=prompts.agent_instructions,
         markdown=False,
@@ -251,12 +333,13 @@ def run_research_agent(
     system_prompt: str,
     user_prompt: str,
     chat_history: list[dict] | None = None,
+    extra_tools: list | None = None,
 ) -> tuple[str, list[dict]]:
     """Run the Agno research agent and return (reply_text, widgets).
 
     This is the main entry point, replacing generate_response_with_tools().
     """
-    agent = _build_agent(system_prompt, chat_history)
+    agent = _build_agent(system_prompt, chat_history, extra_tools=extra_tools)
 
     # Convert chat history to Agno message format and pass as additional_input
     history_messages = []
@@ -286,6 +369,7 @@ def run_research_agent_stream(
     system_prompt: str,
     user_prompt: str,
     chat_history: list[dict] | None = None,
+    extra_tools: list | None = None,
 ) -> Iterator[dict]:
     """Run the Agno research agent in streaming mode.
 
@@ -295,7 +379,7 @@ def run_research_agent_stream(
       {"type": "tool_completed", "tool_name": "...", "tool_exec": ToolExecution}
       {"type": "done", "content": "...", "widgets": [...]}
     """
-    agent = _build_agent(system_prompt, chat_history)
+    agent = _build_agent(system_prompt, chat_history, extra_tools=extra_tools)
 
     history_messages = []
     for msg in (chat_history or []):
