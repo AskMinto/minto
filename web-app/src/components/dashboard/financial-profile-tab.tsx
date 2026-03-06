@@ -358,7 +358,7 @@ export function FinancialProfileTab({ profile }: Props) {
             <h3 className="text-sm font-bold text-minto-text">Goals Mapped</h3>
           </div>
           <div className="space-y-2">
-            {r.goals.map((g: any) => {
+            {r.goals.map((g: any, idx: number) => {
               const years = Number(g.years);
               const strategy = years <= 3 ? "stability" : years <= 5 ? "balanced" : "equity";
               const stratColor =
@@ -368,7 +368,7 @@ export function FinancialProfileTab({ profile }: Props) {
                     ? "bg-minto-positive/10 text-minto-positive"
                     : "bg-[#3d5a3e]/10 text-[#3d5a3e]";
               return (
-                <div key={g.id} className="flex items-center justify-between">
+                <div key={g.id ?? idx} className="flex items-center justify-between">
                   <div>
                     <p className="text-sm font-medium text-minto-text">{g.name}</p>
                     <p className="text-xs text-minto-text-muted">{fmt(g.amount)} · {g.years}y</p>
