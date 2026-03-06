@@ -15,6 +15,23 @@
   --color-minto-dark: #1C211E;
 }
 
+:root {
+  --landing-gradient-stop-1: var(--color-minto-bg-end);
+  --landing-gradient-stop-2: #afc4a3;
+  --landing-gradient-stop-3: var(--color-minto-bg);
+  --landing-gradient-stop-4: #8cab89;
+  --landing-gradient-stop-5: #d9e2cf;
+  --landing-gradient-stop-6: #739673;
+  --landing-gradient-stop-7: #bed0b3;
+  --landing-gradient-stop-8: #ebf1e4;
+  --landing-surface: rgba(255, 255, 255, 0.2);
+  --landing-surface-strong: rgba(255, 255, 255, 0.62);
+  --landing-dark-surface: rgba(255, 255, 255, 0.08);
+  --landing-dark-border: rgba(255, 255, 255, 0.14);
+  --landing-dark-bg-start: #1f2821;
+  --landing-dark-bg-end: #101512;
+}
+
 html,
 body {
   height: 100%;
@@ -31,17 +48,19 @@ body {
   z-index: -1;
   background: linear-gradient(
     160deg,
-    #d4dcc8 0%,
-    #9ebf9c 14%,
-    #c8d5c0 28%,
-    #8cac8a 42%,
-    #d4dcc8 56%,
-    #7b9f7a 70%,
-    #c8d5c0 84%,
-    #9ebf9c 100%
+    var(--landing-gradient-stop-1) 0%,
+    var(--landing-gradient-stop-2) 14%,
+    var(--landing-gradient-stop-3) 28%,
+    var(--landing-gradient-stop-4) 42%,
+    var(--landing-gradient-stop-5) 56%,
+    var(--landing-gradient-stop-6) 70%,
+    var(--landing-gradient-stop-7) 84%,
+    var(--landing-gradient-stop-8) 100%
   );
   background-size: 300% 300%;
   animation: gradientBreath 60s ease-in-out infinite;
+  transform: translateZ(0);
+  will-change: background-position;
 }
 
 @keyframes gradientBreath {
@@ -54,7 +73,7 @@ body {
 
 /* Standard glass — cards, badges, containers */
 .glass-card {
-  background: rgba(255, 255, 255, 0.25);
+  background: var(--landing-surface);
   backdrop-filter: blur(20px) saturate(1.4);
   -webkit-backdrop-filter: blur(20px) saturate(1.4);
   border: 1px solid rgba(255, 255, 255, 0.45);
@@ -66,7 +85,7 @@ body {
 
 /* Elevated glass — sidebar, chat input bar, prominent panels */
 .glass-elevated {
-  background: rgba(255, 255, 255, 0.55);
+  background: var(--landing-surface-strong);
   backdrop-filter: blur(24px) saturate(1.3);
   -webkit-backdrop-filter: blur(24px) saturate(1.3);
   border: 1px solid rgba(255, 255, 255, 0.5);
@@ -81,6 +100,69 @@ body {
   backdrop-filter: blur(14px) saturate(1.3);
   -webkit-backdrop-filter: blur(14px) saturate(1.3);
   border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.landing-page {
+  position: relative;
+  isolation: isolate;
+}
+
+.landing-section {
+  position: relative;
+}
+
+.landing-grid {
+  align-items: center;
+}
+
+.landing-dark-section {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0)),
+    radial-gradient(circle at top left, rgba(61, 90, 62, 0.28), transparent 38%),
+    linear-gradient(160deg, var(--landing-dark-bg-start), var(--landing-dark-bg-end));
+}
+
+.landing-dark-glass {
+  background: var(--landing-dark-surface);
+  backdrop-filter: blur(20px) saturate(1.15);
+  -webkit-backdrop-filter: blur(20px) saturate(1.15);
+  border: 1px solid var(--landing-dark-border);
+  box-shadow:
+    0 18px 40px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.landing-pinned-panel,
+.h-scroll-track,
+.landing-feature-card,
+.macro-card {
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+.h-scroll-track {
+  width: max-content;
+}
+
+@media (max-width: 1279px) {
+  .landing-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animated-gradient-bg {
+    animation: none;
+  }
+
+  .landing-pinned-panel,
+  .h-scroll-track,
+  .landing-feature-card,
+  .macro-card {
+    transform: none;
+    will-change: auto;
+  }
 }
 
 /* Custom scrollbar */

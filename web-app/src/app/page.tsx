@@ -2,7 +2,7 @@
 
 import { useAuth } from "@/providers/auth-provider";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { gsap } from "gsap";
@@ -51,26 +51,31 @@ function ChatBubble({
 }) {
   const bubbleRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!bubbleRef.current) return;
 
-    gsap.fromTo(
-      bubbleRef.current,
-      { opacity: 0, y: 30, scale: 0.9 },
-      {
-        opacity: 1,
-        y: 0,
-        scale: 1,
-        duration: 0.6,
-        delay,
-        ease: "back.out(1.7)",
-        scrollTrigger: {
-          trigger: bubbleRef.current,
-          start: "top 90%",
-          once: true,
-        },
-      }
-    );
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        bubbleRef.current,
+        { opacity: 0, y: 30, scale: 0.9 },
+        {
+          opacity: 1,
+          y: 0,
+          scale: 1,
+          duration: 0.6,
+          delay,
+          ease: "back.out(1.7)",
+          force3D: true,
+          scrollTrigger: {
+            trigger: bubbleRef.current,
+            start: "top 90%",
+            once: true,
+          },
+        }
+      );
+    }, bubbleRef);
+
+    return () => ctx.revert();
   }, [delay]);
 
   return (
@@ -118,25 +123,30 @@ function PortfolioCard({
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!cardRef.current) return;
 
-    gsap.fromTo(
-      cardRef.current,
-      { opacity: 0, x: -40 },
-      {
-        opacity: 1,
-        x: 0,
-        duration: 0.7,
-        delay,
-        ease: "power3.out",
-        scrollTrigger: {
-          trigger: cardRef.current,
-          start: "top 90%",
-          once: true,
-        },
-      }
-    );
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        cardRef.current,
+        { opacity: 0, x: -40 },
+        {
+          opacity: 1,
+          x: 0,
+          duration: 0.7,
+          delay,
+          ease: "power3.out",
+          force3D: true,
+          scrollTrigger: {
+            trigger: cardRef.current,
+            start: "top 90%",
+            once: true,
+          },
+        }
+      );
+    }, cardRef);
+
+    return () => ctx.revert();
   }, [delay]);
 
   const isPositive = !change.startsWith("-");
@@ -167,32 +177,39 @@ function NewsCard({
   headline,
   impact,
   delay = 0,
+  className = "",
 }: {
   headline: string;
   impact: "positive" | "negative" | "neutral";
   delay?: number;
+  className?: string;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!cardRef.current) return;
 
-    gsap.fromTo(
-      cardRef.current,
-      { opacity: 0, y: 20 },
-      {
-        opacity: 1,
-        y: 0,
-        duration: 0.5,
-        delay,
-        ease: "power2.out",
-        scrollTrigger: {
-          trigger: cardRef.current,
-          start: "top 90%",
-          once: true,
-        },
-      }
-    );
+    const ctx = gsap.context(() => {
+      gsap.fromTo(
+        cardRef.current,
+        { opacity: 0, y: 20 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: 0.5,
+          delay,
+          ease: "power2.out",
+          force3D: true,
+          scrollTrigger: {
+            trigger: cardRef.current,
+            start: "top 90%",
+            once: true,
+          },
+        }
+      );
+    }, cardRef);
+
+    return () => ctx.revert();
   }, [delay]);
 
   const impactColors = {
@@ -208,7 +225,7 @@ function NewsCard({
   };
 
   return (
-    <div ref={cardRef} className="glass-card p-4 flex items-start gap-3">
+    <div ref={cardRef} className={`glass-card p-4 flex items-start gap-3 ${className}`}>
       <div className="w-10 h-10 rounded-lg bg-minto-accent/10 flex items-center justify-center flex-shrink-0">
         <Newspaper size={18} className="text-minto-accent" />
       </div>
@@ -239,7 +256,7 @@ export default function LandingPage() {
   }, [session, loading, router]);
 
   // Hero entrance animation
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!heroRef.current || loading || session) return;
 
     const ctx = gsap.context(() => {
@@ -283,65 +300,102 @@ export default function LandingPage() {
   }, [loading, session]);
 
   // Pinned scroll section for macro events
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!macoRef.current || loading || session) return;
 
+    let tl: gsap.core.Timeline | undefined;
+
     const ctx = gsap.context(() => {
-      // Pin the section and animate content
-      const tl = gsap.timeline({
+      tl = gsap.timeline({
         scrollTrigger: {
           trigger: macoRef.current,
           start: "top top",
           end: "+=200%",
           pin: true,
-          scrub: 1,
+          scrub: 0.8,
+          anticipatePin: 1,
+          fastScrollEnd: true,
+          invalidateOnRefresh: true,
+          onLeaveBack: () => {
+            gsap.set([".macro-title", ".macro-card", ".macro-insight"], { clearProps: "transform,opacity" });
+          },
         },
       });
 
       tl.fromTo(
         ".macro-title",
         { opacity: 0, y: 50 },
-        { opacity: 1, y: 0, duration: 0.3 }
+        { opacity: 1, y: 0, duration: 0.3, force3D: true }
       )
         .fromTo(
           ".macro-card",
           { opacity: 0, x: 100 },
-          { opacity: 1, x: 0, stagger: 0.1, duration: 0.3 },
+          { opacity: 1, x: 0, stagger: 0.1, duration: 0.3, force3D: true },
           "-=0.1"
         )
         .fromTo(
           ".macro-insight",
           { opacity: 0, y: 30 },
-          { opacity: 1, y: 0, duration: 0.3 },
+          { opacity: 1, y: 0, duration: 0.3, force3D: true },
           "-=0.1"
         );
+
     }, macoRef);
 
-    return () => ctx.revert();
+    return () => {
+      tl?.scrollTrigger?.kill();
+      tl?.kill();
+      ctx.revert();
+    };
   }, [loading, session]);
 
   // Horizontal scroll for features
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!pinnedSectionRef.current || loading || session) return;
 
+    let tween: gsap.core.Tween | undefined;
+
     const ctx = gsap.context(() => {
+      const track = pinnedSectionRef.current?.querySelector<HTMLElement>(".h-scroll-track");
       const cards = gsap.utils.toArray<HTMLElement>(".h-scroll-card");
-      
-      gsap.to(cards, {
-        xPercent: -100 * (cards.length - 1),
+      if (!track || cards.length < 2) return;
+
+      const getDistance = () => {
+        const viewportWidth = pinnedSectionRef.current?.offsetWidth ?? window.innerWidth;
+        return Math.max(0, track.scrollWidth - viewportWidth);
+      };
+
+      tween = gsap.to(track, {
+        x: () => -getDistance(),
         ease: "none",
+        force3D: true,
         scrollTrigger: {
           trigger: pinnedSectionRef.current,
           start: "top top",
-          end: `+=${cards.length * 100}%`,
+          end: () => `+=${getDistance()}`,
           pin: true,
-          scrub: 1,
-          snap: 1 / (cards.length - 1),
+          scrub: 0.8,
+          anticipatePin: 1,
+          invalidateOnRefresh: true,
+          fastScrollEnd: true,
+          snap: {
+            snapTo: cards.length > 1 ? 1 / (cards.length - 1) : 1,
+            duration: 0.2,
+            ease: "power1.inOut",
+          },
+          onLeaveBack: () => {
+            gsap.set(track, { clearProps: "transform" });
+          },
         },
       });
+
     }, pinnedSectionRef);
 
-    return () => ctx.revert();
+    return () => {
+      tween?.scrollTrigger?.kill();
+      tween?.kill();
+      ctx.revert();
+    };
   }, [loading, session]);
 
   if (loading || session) {
@@ -353,7 +407,7 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-minto-bg">
+    <div className="landing-page min-h-screen overflow-x-hidden">
       {/* Fixed Navigation */}
       <nav className="fixed top-0 left-0 right-0 z-50 px-6 py-4 mix-blend-difference">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -416,11 +470,11 @@ export default function LandingPage() {
       </section>
 
       {/* SECTION 2: The Problem - Big Asymmetric Layout */}
-      <section className="min-h-screen py-32 px-6 relative overflow-hidden">
+      <section className="landing-section min-h-screen py-32 px-6 relative overflow-hidden">
         <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-12 gap-8 items-center">
+          <div className="landing-grid grid gap-10 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,28rem)] items-center">
             {/* Left: Massive text */}
-            <div className="md:col-span-7">
+            <div className="max-w-3xl">
               <h2 className="text-5xl md:text-7xl font-black text-minto-text leading-tight mb-8">
                 Your portfolio is connected to{" "}
                 <span className="text-minto-accent">everything.</span>
@@ -432,7 +486,7 @@ export default function LandingPage() {
             </div>
 
             {/* Right: Floating stat cards */}
-            <div className="md:col-span-5 space-y-4">
+            <div className="space-y-4 xl:justify-self-end xl:w-full xl:max-w-md">
               <div className="glass-elevated p-6 rounded-2xl transform rotate-2 hover:rotate-0 transition-transform">
                 <div className="flex items-center gap-3 mb-3">
                   <Globe className="text-minto-accent" size={24} />
@@ -465,19 +519,19 @@ export default function LandingPage() {
       </section>
 
       {/* SECTION 3: Macro Events - Pinned Scrollytelling */}
-      <section ref={macoRef} className="min-h-screen relative bg-minto-text text-white overflow-hidden">
-        <div className="absolute inset-0 opacity-5">
+      <section ref={macoRef} className="landing-dark-section min-h-screen relative text-white overflow-hidden">
+        <div className="absolute inset-0 opacity-20 pointer-events-none">
           <div className="absolute inset-0" style={{
-            backgroundImage: `radial-gradient(circle at 2px 2px, rgba(255,255,255,0.15) 1px, transparent 0)`,
+            backgroundImage: `radial-gradient(circle at 2px 2px, rgba(255,255,255,0.14) 1px, transparent 0)`,
             backgroundSize: "40px 40px"
           }} />
         </div>
 
         <div className="h-screen flex items-center px-6 md:px-12">
-          <div className="max-w-7xl mx-auto w-full grid md:grid-cols-2 gap-12 items-center">
+          <div className="max-w-7xl mx-auto w-full grid xl:grid-cols-[minmax(0,1fr)_minmax(22rem,26rem)] gap-12 items-center">
             {/* Left: Fixed content */}
-            <div className="macro-title">
-              <div className="inline-flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full mb-6">
+            <div className="macro-title landing-pinned-panel max-w-2xl">
+              <div className="inline-flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full mb-6 border border-white/12">
                 <Newspaper size={16} />
                 <span className="text-sm font-medium">Macro Intelligence</span>
               </div>
@@ -489,7 +543,7 @@ export default function LandingPage() {
                 We explain the "so what" for your money.
               </p>
               
-              <div className="macro-insight glass-elevated bg-white/5 p-5 rounded-xl">
+              <div className="macro-insight landing-dark-glass p-5 rounded-xl">
                 <div className="flex items-start gap-3">
                   <Brain className="text-minto-accent flex-shrink-0" size={24} />
                   <div>
@@ -504,31 +558,36 @@ export default function LandingPage() {
             </div>
 
             {/* Right: Scrolling news cards */}
-            <div className="space-y-4 max-w-md">
+            <div className="space-y-4 max-w-md xl:justify-self-end">
               <NewsCard 
                 headline="RBI holds repo rate at 6.5%. Your debt MF yields stable."
                 impact="neutral"
                 delay={0}
+                className="macro-card"
               />
               <NewsCard 
                 headline="India-ME trade corridor announced. Shipping & logistics stocks rally."
                 impact="positive"
                 delay={0.1}
+                className="macro-card"
               />
               <NewsCard 
                 headline="Tech selloff in US markets. Indian IT sector facing headwinds."
                 impact="negative"
                 delay={0.2}
+                className="macro-card"
               />
               <NewsCard 
                 headline="Auto sales hit record high. Your Maruti & Tata Motors holdings up."
                 impact="positive"
                 delay={0.3}
+                className="macro-card"
               />
               <NewsCard 
                 headline="Rupee depreciates vs Dollar. Export-oriented sectors benefit."
                 impact="positive"
                 delay={0.4}
+                className="macro-card"
               />
             </div>
           </div>
@@ -536,7 +595,7 @@ export default function LandingPage() {
       </section>
 
       {/* SECTION 4: Chat Demo - Full Width Immersive */}
-      <section className="min-h-screen py-32 px-6 relative">
+      <section className="landing-section min-h-screen py-32 px-6 relative">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-5xl md:text-7xl font-black text-minto-text mb-6">
@@ -596,9 +655,9 @@ export default function LandingPage() {
       </section>
 
       {/* SECTION 5: Portfolio Demo - Split Screen */}
-      <section className="min-h-screen py-32 px-6">
+      <section className="landing-section min-h-screen py-32 px-6">
         <div className="max-w-7xl mx-auto">
-          <div className="grid md:grid-cols-2 gap-16 items-center">
+          <div className="grid xl:grid-cols-[minmax(22rem,1fr)_minmax(0,0.92fr)] gap-16 items-center">
             {/* Left: Portfolio Cards */}
             <div className="space-y-4 order-2 md:order-1">
               <div className="glass-elevated p-6 rounded-2xl mb-6">
@@ -654,11 +713,11 @@ export default function LandingPage() {
       </section>
 
       {/* SECTION 6: Horizontal Scroll Features */}
-      <section ref={pinnedSectionRef} className="min-h-screen relative overflow-hidden">
+      <section ref={pinnedSectionRef} className="landing-section min-h-screen relative overflow-hidden">
         <div className="h-screen flex items-center">
-          <div className="h-scroll-container flex gap-8 pl-12 pr-[50vw]">
+          <div className="h-scroll-track flex items-stretch gap-6 xl:gap-8 pl-6 md:pl-10 xl:pl-16 pr-[12vw] md:pr-[18vw] xl:pr-[24vw]">
             {/* Intro Card */}
-            <div className="h-scroll-card min-w-[400px] md:min-w-[500px] flex flex-col justify-center">
+            <div className="h-scroll-card landing-feature-card min-w-[min(88vw,26rem)] md:min-w-[30rem] xl:min-w-[34rem] flex flex-col justify-center pr-2">
               <h2 className="text-5xl md:text-6xl font-black text-minto-text leading-tight mb-6">
                 Built for Indian investors.
               </h2>
@@ -668,7 +727,7 @@ export default function LandingPage() {
             </div>
 
             {/* Feature Cards */}
-            <div className="h-scroll-card min-w-[350px] glass-elevated p-8 rounded-3xl flex flex-col">
+            <div className="h-scroll-card landing-feature-card min-w-[min(84vw,23rem)] xl:min-w-[24rem] glass-elevated p-8 rounded-3xl flex flex-col">
               <div className="w-16 h-16 rounded-2xl bg-minto-accent/10 flex items-center justify-center mb-6">
                 <BarChart3 size={32} className="text-minto-accent" />
               </div>
@@ -678,7 +737,7 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="h-scroll-card min-w-[350px] glass-elevated p-8 rounded-3xl flex flex-col">
+            <div className="h-scroll-card landing-feature-card min-w-[min(84vw,23rem)] xl:min-w-[24rem] glass-elevated p-8 rounded-3xl flex flex-col">
               <div className="w-16 h-16 rounded-2xl bg-minto-accent/10 flex items-center justify-center mb-6">
                 <Target size={32} className="text-minto-accent" />
               </div>
@@ -688,7 +747,7 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="h-scroll-card min-w-[350px] glass-elevated p-8 rounded-3xl flex flex-col">
+            <div className="h-scroll-card landing-feature-card min-w-[min(84vw,23rem)] xl:min-w-[24rem] glass-elevated p-8 rounded-3xl flex flex-col">
               <div className="w-16 h-16 rounded-2xl bg-minto-accent/10 flex items-center justify-center mb-6">
                 <AlertCircle size={32} className="text-minto-accent" />
               </div>
@@ -698,7 +757,7 @@ export default function LandingPage() {
               </p>
             </div>
 
-            <div className="h-scroll-card min-w-[350px] glass-elevated p-8 rounded-3xl flex flex-col">
+            <div className="h-scroll-card landing-feature-card min-w-[min(84vw,23rem)] xl:min-w-[24rem] glass-elevated p-8 rounded-3xl flex flex-col">
               <div className="w-16 h-16 rounded-2xl bg-minto-accent/10 flex items-center justify-center mb-6">
                 <Search size={32} className="text-minto-accent" />
               </div>
@@ -712,7 +771,7 @@ export default function LandingPage() {
       </section>
 
       {/* SECTION 7: Final CTA - Full Bleed */}
-      <section className="min-h-[80vh] flex items-center justify-center px-6 relative overflow-hidden">
+      <section className="landing-section min-h-[80vh] flex items-center justify-center px-6 relative overflow-hidden">
         {/* Background decoration */}
         <div className="absolute inset-0 overflow-hidden">
           <div className="absolute -top-1/2 -right-1/2 w-full h-full bg-minto-accent/5 rounded-full blur-3xl" />
@@ -720,7 +779,7 @@ export default function LandingPage() {
         </div>
 
         <div className="relative text-center max-w-4xl mx-auto">
-          <div className="glass-elevated p-6 rounded-3xl inline-block mb-10">
+          <div className="glass-elevated p-6 rounded-3xl inline-block mb-10 shadow-[0_24px_80px_rgba(45,58,46,0.12)]">
             <Image src="/minto.png" alt="Minto" width={80} height={80} />
           </div>
           <h2 className="text-5xl md:text-7xl font-black text-minto-text mb-6 leading-tight">

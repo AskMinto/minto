@@ -1,243 +1,280 @@
 # Landing Page Edit Guide
 
-How to edit the Minto web app landing page.
+How to edit the Minto web landing page after the scrollytelling and animation cleanup.
 
-## Primary File
+## Primary Files
 
 ```
 web-app/src/app/page.tsx
+web-app/src/app/globals.css
 ```
 
-This is the **only file you need to edit** for content and layout changes. It's a single React component (`LandingPage`) that renders everything.
+- `page.tsx` owns the landing page structure, section content, and GSAP setup.
+- `globals.css` owns shared landing tokens, glass surfaces, the animated background, and cross-browser rendering helpers.
 
-## Page Structure
+## Current Page Structure
 
-The landing page has 4 sections, top to bottom:
+The landing page is a single client component with seven sections:
 
-```
-┌──────────────────────────────────────┐
-│  HEADER — logo + "Get Started" CTA   │
-├──────────────────────────────────────┤
-│                                      │
-│  HERO — icon, headline, subtitle,    │
-│         description, CTA button      │
-│                                      │
-├──────────────────────────────────────┤
-│  FEATURE PILLS — 3 glass cards       │
-├──────────────────────────────────────┤
-│  FOOTER — disclaimer text            │
-└──────────────────────────────────────┘
-```
+1. Fixed navigation
+2. Hero
+3. Macro/problem setup
+4. Pinned macro scrollytelling section
+5. Chat demo
+6. Portfolio demo
+7. Pinned horizontal feature rail
+8. Final CTA + footer
 
-### Section Breakdown
+## Animation Architecture
 
-**Header** (lines ~33–44):
-```tsx
-<header className="flex items-center justify-between px-6 py-4 max-w-6xl mx-auto w-full">
-```
-- Logo: `<Image src="/minto.png" ... />` — the logo lives at `web-app/public/minto.png`
-- Brand name: `<span>Minto</span>`
-- CTA button: links to `/login`
+GSAP lives in `web-app/src/app/page.tsx`.
 
-**Hero** (lines ~47–72):
-```tsx
-<main className="flex-1 flex flex-col items-center justify-center px-6 text-center max-w-3xl mx-auto -mt-16">
-```
-- Logo icon in a glass card
-- Headline: `"Meet Minto"` — `text-5xl md:text-6xl font-bold`
-- Subtitle: `"Your AI Portfolio Assistant"` — `text-xl md:text-2xl`
-- Description paragraph — `text-base max-w-lg`
-- CTA button: `"Get Started"` with arrow icon, links to `/login`
-
-**Feature Pills** (lines ~74–88):
-```tsx
-<div className="flex flex-wrap justify-center gap-4 mt-16">
-```
-- Array of `{ icon, label }` objects rendered as glass cards
-- Icons from `lucide-react`: `MessageCircle`, `BarChart3`, `Shield`
-- To add/remove/change features, edit the array
-
-**Footer** (lines ~91–93):
-```tsx
-<footer className="text-center py-6 text-sm text-minto-text-muted">
-```
-- Disclaimer text
-
-## Auth Redirect Behavior
-
-The page checks auth state on mount. **Logged-in users are immediately redirected to `/chat`** and never see the landing page:
+### Registered plugin
 
 ```tsx
-useEffect(() => {
-  if (!loading && session) {
-    router.replace("/chat");
+gsap.registerPlugin(ScrollTrigger);
+```
+
+### Animation patterns in use
+
+- `useLayoutEffect` is used for all GSAP setup so measurements happen before paint.
+- Every animated component uses `gsap.context(...)` and returns `ctx.revert()`.
+- The two pinned scrollytelling sections also explicitly kill their timeline/tween and `ScrollTrigger` in cleanup.
+
+### Pinned sections
+
+There are two pinned sections:
+
+#### Macro section
+
+Target ref:
+
+```tsx
+const macoRef = useRef<HTMLDivElement>(null);
+```
+
+This section animates:
+
+- `.macro-title`
+- `.macro-card`
+- `.macro-insight`
+
+The trigger uses:
+
+```tsx
+pin: true,
+scrub: 0.8,
+anticipatePin: 1,
+fastScrollEnd: true,
+invalidateOnRefresh: true,
+```
+
+If you add new animated elements to the macro section, either:
+
+- include them in the existing timeline, or
+- give them their own scoped `gsap.context` with cleanup.
+
+Do not add unmanaged `ScrollTrigger.create(...)` calls in this section.
+
+#### Horizontal feature rail
+
+Target ref:
+
+```tsx
+const pinnedSectionRef = useRef<HTMLDivElement>(null);
+```
+
+Important detail: the animation now moves the **track**, not each card individually.
+
+```tsx
+const track = pinnedSectionRef.current?.querySelector<HTMLElement>(".h-scroll-track");
+```
+
+Distance is computed from real layout width:
+
+```tsx
+const getDistance = () => {
+  const viewportWidth = pinnedSectionRef.current?.offsetWidth ?? window.innerWidth;
+  return Math.max(0, track.scrollWidth - viewportWidth);
+};
+```
+
+This is what keeps the rail stable at 1280px, 1440px, 1920px, and other wide layouts.
+
+If you add or remove cards, keep the `.h-scroll-track` / `.h-scroll-card` structure intact.
+
+## Color and Surface Tokens
+
+Landing-specific tokens now live in `globals.css` under `:root`.
+
+### Core landing tokens
+
+```css
+:root {
+  --landing-gradient-stop-1: var(--color-minto-bg-end);
+  --landing-gradient-stop-2: #afc4a3;
+  --landing-gradient-stop-3: var(--color-minto-bg);
+  --landing-gradient-stop-4: #8cab89;
+  --landing-gradient-stop-5: #d9e2cf;
+  --landing-gradient-stop-6: #739673;
+  --landing-gradient-stop-7: #bed0b3;
+  --landing-gradient-stop-8: #ebf1e4;
+  --landing-surface: rgba(255, 255, 255, 0.2);
+  --landing-surface-strong: rgba(255, 255, 255, 0.62);
+  --landing-dark-surface: rgba(255, 255, 255, 0.08);
+  --landing-dark-border: rgba(255, 255, 255, 0.14);
+  --landing-dark-bg-start: #1f2821;
+  --landing-dark-bg-end: #101512;
+}
+```
+
+### Shared Tailwind theme colors
+
+These still come from `@theme` and are used as utility classes:
+
+- `text-minto-text`
+- `text-minto-text-secondary`
+- `text-minto-text-muted`
+- `bg-minto-accent`
+- `text-minto-positive`
+- `text-minto-negative`
+
+### Glass surfaces
+
+`globals.css` now maps the shared glass classes to the landing tokens:
+
+- `.glass-card` → `--landing-surface`
+- `.glass-elevated` → `--landing-surface-strong`
+- `.landing-dark-glass` → dark pinned section surface
+
+Use `.landing-dark-glass` instead of stacking `glass-elevated` with manual `bg-white/...` overrides inside dark sections.
+
+## Background System
+
+The animated background still renders globally from `web-app/src/app/layout.tsx`:
+
+```tsx
+<div className="animated-gradient-bg" />
+```
+
+The landing page wrapper should stay:
+
+```tsx
+<div className="landing-page min-h-screen overflow-x-hidden">
+```
+
+Do **not** add `bg-minto-bg` to the page root. That would flatten the animated gradient and reintroduce abrupt transitions between sections.
+
+## Layout Rules
+
+### Section 2 asymmetric layout
+
+The problem section now uses a controlled grid:
+
+```tsx
+<div className="landing-grid grid gap-10 xl:grid-cols-[minmax(0,1.15fr)_minmax(22rem,28rem)] items-center">
+```
+
+This keeps the text column visually dominant while preventing the card stack from collapsing awkwardly at wide-but-not-ultrawide widths.
+
+### Section 5 split layout
+
+The portfolio section uses:
+
+```tsx
+<div className="grid xl:grid-cols-[minmax(22rem,1fr)_minmax(0,0.92fr)] gap-16 items-center">
+```
+
+If you change content density here, adjust both columns together rather than only changing one side.
+
+### Horizontal cards
+
+Feature cards use viewport-aware minimum widths:
+
+```tsx
+min-w-[min(84vw,23rem)]
+xl:min-w-[24rem]
+```
+
+Keep widths expressed this way so cards remain balanced at uncommon desktop sizes.
+
+## Cross-Browser Rendering Helpers
+
+`globals.css` includes rendering guards for the animated and pinned elements:
+
+```css
+.landing-pinned-panel,
+.h-scroll-track,
+.landing-feature-card,
+.macro-card {
+  transform: translate3d(0, 0, 0);
+  backface-visibility: hidden;
+  will-change: transform;
+}
+```
+
+These are there to reduce jitter during pinned scroll and backdrop-filter transitions in Chrome, Safari, and Firefox.
+
+## Reduced Motion
+
+The landing page now respects reduced motion in `globals.css`:
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  .animated-gradient-bg {
+    animation: none;
   }
-}, [session, loading, router]);
+}
 ```
 
-While loading or if the user has a session, a spinner is shown instead of the page content. If you want to show the landing page to logged-in users too (e.g., for marketing), remove this redirect logic.
+If you add new continuous animations, include them in the same media query.
 
-## Styling Reference
+## Safe Editing Rules
 
-### Tailwind Color Classes
+### If you change text only
 
-All custom colors are available as Tailwind utilities via `@theme` in `globals.css`:
+Edit `page.tsx` content directly. No CSS changes are needed.
 
-| Class prefix | Color | Hex |
-|---|---|---|
-| `text-minto-text` | Primary text | `#2d3a2e` |
-| `text-minto-text-secondary` | Secondary text | `#5a6b5c` |
-| `text-minto-text-muted` | Muted/label text | `#8a9a8c` |
-| `bg-minto-accent` | Primary green | `#3d5a3e` |
-| `text-minto-positive` | Gain green | `#3d8b4f` |
-| `text-minto-negative` | Loss red | `#c4483e` |
-| `text-minto-gold` | Gold accent | `#b8943e` |
+### If you add a new card to the horizontal rail
 
-Usage: `text-minto-accent`, `bg-minto-accent/10` (10% opacity), `border-minto-gold/20`, etc.
+Add another `.h-scroll-card` inside `.h-scroll-track`. Do not change the GSAP target from the track back to the cards.
 
-### Glass Effects
+### If you add a new pinned section
 
-Three CSS utility classes available (defined in `globals.css`):
+- use `useLayoutEffect`
+- scope selectors with `gsap.context`
+- kill the tween/timeline and its `ScrollTrigger` in cleanup
+- prefer width- or height-based measurements using functions with `invalidateOnRefresh: true`
 
-| Class | Background | Blur | Use for |
-|---|---|---|---|
-| `glass-card` | `rgba(255,255,255,0.25)` | 20px | Standard cards, badges, feature pills |
-| `glass-elevated` | `rgba(255,255,255,0.55)` | 24px | Prominent panels, headers |
-| `glass-subtle` | `rgba(255,255,255,0.18)` | 14px | Nested elements, inputs |
+### If you change colors
 
-All include `backdrop-filter`, `saturate()`, `border`, `box-shadow`, and `inset` highlight.
+Prefer editing landing tokens in `globals.css` instead of scattering new hardcoded values through JSX.
 
-### Background
+## Verification Commands
 
-The animated gradient is applied globally via `<div className="animated-gradient-bg" />` in `layout.tsx`. The landing page sits on top of it — no need to set a background.
+From `web-app/`:
 
-### Typography
-
-- Font: **DM Sans** (400/500/700), applied globally via `--font-dm-sans` CSS variable
-- Large headings: `text-5xl md:text-6xl font-bold tracking-tight`
-- Subtitles: `text-xl md:text-2xl text-minto-text-secondary`
-- Body: `text-base text-minto-text-muted`
-- Labels/pills: `text-sm font-medium`
-
-### Buttons
-
-Primary CTA pattern used on the landing page:
-```tsx
-<Link
-  href="/login"
-  className="bg-minto-accent text-white px-8 py-3.5 rounded-full text-base font-medium hover:opacity-90 transition-opacity flex items-center gap-2"
->
-  Get Started <ArrowRight size={18} />
-</Link>
+```bash
+npm run build
 ```
 
-Alternatively, use the `<Button>` component from `@/components/ui/button` which has `primary`, `secondary`, `destructive`, and `ghost` variants.
+The production build validates:
 
-### Icons
-
-Icons come from `lucide-react`. Browse available icons at [lucide.dev/icons](https://lucide.dev/icons).
-
-```tsx
-import { MessageCircle, BarChart3, Shield } from "lucide-react";
-<Icon size={18} className="text-minto-accent" />
-```
+- TypeScript correctness
+- lint/type checks performed by Next.js during build
+- App router compilation
 
 ## Files That Affect the Landing Page
 
-| File | What it controls |
-|---|---|
-| `web-app/src/app/page.tsx` | Page content, layout, and logic |
-| `web-app/src/app/globals.css` | Glass effects, animated background, color theme, markdown styles |
-| `web-app/src/app/layout.tsx` | Root layout — animated gradient `<div>`, font loading, `<AuthProvider>` |
-| `web-app/src/lib/constants.ts` | `THEME` colors object (used by chart components, not directly by landing page) |
-| `web-app/src/providers/auth-provider.tsx` | Auth state — controls the redirect-if-logged-in behavior |
-| `web-app/public/minto.png` | Logo image |
-| `web-app/src/components/ui/button.tsx` | Reusable `<Button>` component (optional — landing page currently uses raw `<Link>`) |
+- `web-app/src/app/page.tsx`
+- `web-app/src/app/globals.css`
+- `web-app/src/app/layout.tsx`
+- `web-app/public/minto.png`
+- `web-app/src/providers/auth-provider.tsx`
 
-## Common Edits
+## Current Implementation Notes
 
-### Change the headline
-```tsx
-// In page.tsx, find:
-<h1 className="text-5xl md:text-6xl font-bold text-minto-text tracking-tight mb-6 leading-tight">
-  Meet Minto
-</h1>
-// Change the text inside
-```
-
-### Change the subtitle / description
-```tsx
-// Subtitle:
-<p className="text-xl md:text-2xl text-minto-text-secondary mb-4 leading-relaxed">
-  Your AI Portfolio Assistant
-</p>
-// Description:
-<p className="text-base text-minto-text-muted mb-10 max-w-lg">
-  Track your Indian market portfolio...
-</p>
-```
-
-### Add a new feature pill
-```tsx
-// Find the feature pills array and add an entry:
-{[
-  { icon: MessageCircle, label: "AI Chat Assistant" },
-  { icon: BarChart3, label: "Portfolio Analytics" },
-  { icon: Shield, label: "Risk Insights" },
-  { icon: TrendingUp, label: "Market News" },  // ← new
-].map(({ icon: Icon, label }) => (
-```
-Remember to import the icon: `import { TrendingUp } from "lucide-react";`
-
-### Add a new section (e.g., testimonials, screenshots)
-Insert a new `<section>` between `</main>` and `<footer>`:
-```tsx
-{/* Testimonials */}
-<section className="max-w-4xl mx-auto px-6 py-16">
-  <h2 className="text-2xl font-bold text-minto-text text-center mb-8">
-    What investors say
-  </h2>
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-    <div className="glass-card p-6">
-      <p className="text-sm text-minto-text-secondary">"Quote here"</p>
-      <p className="text-xs text-minto-text-muted mt-2">— Name</p>
-    </div>
-    {/* ... more cards */}
-  </div>
-</section>
-```
-
-### Change the background gradient colors
-Edit `globals.css`:
-```css
-.animated-gradient-bg {
-  background: linear-gradient(
-    160deg,
-    #d4dcc8 0%,    /* ← lightest sage */
-    #9ebf9c 14%,   /* ← medium green */
-    #c8d5c0 28%,   /* ← light sage */
-    ...
-  );
-}
-```
-
-### Change the accent color
-Edit `globals.css` under `@theme`:
-```css
-@theme {
-  --color-minto-accent: #3d5a3e;  /* ← change this */
-}
-```
-This propagates to all `bg-minto-accent`, `text-minto-accent`, `border-minto-accent` usages.
-
-### Replace the logo
-Replace `web-app/public/minto.png` with a new image (same filename), or update the `src` in the `<Image>` tags.
-
-## Dev Server
-
-```bash
-cd web-app
-npm run dev
-```
-
-The landing page is at `http://localhost:3000`. Changes to `page.tsx` hot-reload instantly. Changes to `globals.css` also hot-reload. If you see stale content, delete `.next/` and restart.
+- Logged-in users are still redirected from the landing page to `/chat`.
+- The macro section uses a dedicated dark background and dark glass treatment.
+- The global animated gradient remains visible behind all non-dark landing sections.
+- Pinned section cleanup is explicit and should stay that way.
