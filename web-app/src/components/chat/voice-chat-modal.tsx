@@ -212,17 +212,17 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-      <div className="bg-[#121413] border border-white/10 shadow-xl rounded-3xl w-full max-w-md overflow-hidden flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-md p-4 animate-in fade-in duration-200">
+      <div className="glass-card shadow-2xl rounded-[2rem] w-full max-w-md overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-white/10">
-          <h3 className="text-white font-medium flex items-center gap-2">
+        <div className="flex items-center justify-between p-4 border-b border-white/30">
+          <h3 className="text-minto-text font-medium flex items-center gap-2">
             <Mic className="w-5 h-5 text-minto-accent" />
             Voice Chat
           </h3>
           <button
             onClick={onClose}
-            className="text-white/50 hover:text-white transition-colors p-1"
+            className="text-minto-text-muted hover:text-minto-text transition-colors p-1"
           >
             <X size={20} />
           </button>
@@ -243,15 +243,15 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
             {status === "connecting" ? (
               <div className="flex flex-col items-center gap-4 text-minto-accent">
                 <Loader2 className="w-12 h-12 animate-spin" />
-                <p className="text-white/70 text-sm">Connecting to AI...</p>
+                <p className="text-minto-text-secondary text-sm">Connecting to AI...</p>
               </div>
             ) : status === "error" ? (
-              <div className="flex flex-col items-center gap-4 text-red-400 text-center">
+              <div className="flex flex-col items-center gap-4 text-minto-negative text-center">
                 <MicOff className="w-12 h-12" />
                 <p className="text-sm">{errorMessage}</p>
                 <button 
                   onClick={startSession}
-                  className="mt-2 px-4 py-2 bg-white/10 hover:bg-white/20 rounded-full text-white text-sm transition-colors"
+                  className="mt-2 px-4 py-2 bg-minto-negative/10 hover:bg-minto-negative/20 rounded-full text-minto-negative text-sm transition-colors"
                 >
                   Try Again
                 </button>
@@ -262,7 +262,7 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
                   className={`w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 ${
                     status === "speaking" 
                       ? "bg-minto-accent text-white scale-110 shadow-[0_0_30px_rgba(75,172,130,0.4)]" 
-                      : "bg-white/5 text-white/50 scale-100"
+                      : "bg-white/40 text-minto-text-muted scale-100 border border-white/50 shadow-sm"
                   }`}
                 >
                   <Mic className="w-10 h-10" />
@@ -270,10 +270,10 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
                 
                 <div className="mt-8 text-center h-20 w-full flex items-center justify-center">
                   {status === "listening" && !transcript && (
-                    <p className="text-white/50 text-lg animate-pulse">Listening...</p>
+                    <p className="text-minto-text-muted text-lg animate-pulse">Listening...</p>
                   )}
                   {transcript && (
-                    <p className="text-white/90 text-lg font-medium tracking-wide">
+                    <p className="text-minto-text text-lg font-medium tracking-wide">
                       {transcript}
                     </p>
                   )}
