@@ -419,10 +419,20 @@ async def get_voice_token(user: UserContext = Depends(get_user_context)):
             detail="OPENAI_API_KEY is not configured.",
         )
 
+    supabase = get_supabase_client(user.token)
+    chat_id = _get_or_create_thread(supabase, user.user_id)
+    portfolio, memory, _, risk_profile, financial_profile = _load_chat_context(
+        supabase, user, chat_id
+    )
+
+    system_prompt = _build_system_prompt(risk_profile)
+    agent_instructions = "\n".join(prompts.agent_instructions)
+    context_prompt = _build_user_prompt("", memory, portfolio, financial_profile)
+
+    full_instructions = f"{system_prompt}\n\n{agent_instructions}\n\n{context_prompt}"
+
     try:
         async with httpx.AsyncClient() as client:
-            # According to latest OpenAI docs for Realtime WebRTC:
-            # We call POST https://api.openai.com/v1/realtime/sessions with the model.
             response = await client.post(
                 "https://api.openai.com/v1/realtime/sessions",
                 headers={
@@ -432,12 +442,44 @@ async def get_voice_token(user: UserContext = Depends(get_user_context)):
                 json={
                     "model": "gpt-4o-realtime-preview-2024-12-17",
                     "voice": "verse",
+                    "instructions": full_instructions,
+                    "tools": [
+                        {
+                            "type": "function",
+                            "name": "get_current_stock_price",
+                            "description": "Get the current stock price for an Indian equity.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "symbol": {
+                                        "type": "string",
+                                        "description": "The stock symbol with .NS or .BO suffix (e.g., SBIN.NS)",
+                                    }
+                                },
+                                "required": ["symbol"],
+                            },
+                        },
+                        {
+                            "type": "function",
+                            "name": "get_mf_nav",
+                            "description": "Get the current NAV for a mutual fund.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "scheme_code": {
+                                        "type": "string",
+                                        "description": "The mutual fund scheme code",
+                                    }
+                                },
+                                "required": ["scheme_code"],
+                            },
+                        },
+                    ],
                 },
                 timeout=10.0,
             )
             response.raise_for_status()
-            data = response.json()
-            return data
+            return response.json()
     except Exception as e:
         logger.error(f"Error fetching Realtime API token: {e}")
         raise HTTPException(

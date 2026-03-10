@@ -115,6 +115,39 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
           } else if (event.type === "input_audio_buffer.speech_started") {
              setStatus("listening");
              setTranscript("");
+          } else if (event.type === "response.function_call_arguments.done") {
+             const callId = event.call_id;
+             const name = event.name;
+             const args = JSON.parse(event.arguments);
+             
+             (async () => {
+                 let result = "";
+                 try {
+                     if (name === "get_current_stock_price") {
+                         const res = await fetch(`/api/proxy/prices/quote?symbol=${args.symbol}`);
+                         const data = await res.json();
+                         result = JSON.stringify(data);
+                     } else if (name === "get_mf_nav") {
+                         const res = await fetch(`/api/proxy/mf/${args.scheme_code}/detail`);
+                         const data = await res.json();
+                         result = JSON.stringify(data);
+                     } else {
+                         result = JSON.stringify({ error: "Unknown function" });
+                     }
+                 } catch (err: any) {
+                     result = JSON.stringify({ error: err.message });
+                 }
+                 
+                 dc.send(JSON.stringify({
+                     type: "conversation.item.create",
+                     item: {
+                         type: "function_call_output",
+                         call_id: callId,
+                         output: result
+                     }
+                 }));
+                 dc.send(JSON.stringify({ type: "response.create" }));
+             })();
           }
         } catch (err) {
           console.error("Data channel parse error:", err);
@@ -149,18 +182,6 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
 
       // Successfully connected
       setStatus("listening");
-      
-      // Send initial instructions via data channel when open
-      dc.onopen = () => {
-         const sysMessage = {
-           type: "session.update",
-           session: {
-             instructions: "You are Minto, a conversational financial assistant. Be concise, friendly, and helpful. Always give answers under 3-4 sentences. Do not format with markdown, speak naturally.",
-             voice: "verse",
-           }
-         };
-         dc.send(JSON.stringify(sysMessage));
-      };
 
     } catch (err: any) {
       console.error(err);

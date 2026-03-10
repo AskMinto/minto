@@ -117,7 +117,8 @@ class Prompts:
             fp_block = self._format_financial_profile(financial_profile)
             if fp_block:
                 parts.append(fp_block)
-        parts.append(cfg["message_section"].format(message=message).strip())
+        if message:
+            parts.append(cfg["message_section"].format(message=message).strip())
         return "\n\n".join(parts)
 
     def _format_financial_profile(self, profile: dict[str, Any]) -> str:
@@ -180,10 +181,14 @@ class Prompts:
         esop_vested = responses.get("esopVestedValue", 0)
 
         goals = responses.get("goals", [])
-        goals_str = ", ".join(
-            f"{g.get('name', '?')} ({fmt(g.get('amount'))} in {g.get('years', '?')}y)"
-            for g in goals[:5]
-        ) if goals else "None set"
+        goals_str = (
+            ", ".join(
+                f"{g.get('name', '?')} ({fmt(g.get('amount'))} in {g.get('years', '?')}y)"
+                for g in goals[:5]
+            )
+            if goals
+            else "None set"
+        )
 
         comfort = responses.get("comfortLevel", "—")
         comfort_labels = {
@@ -195,15 +200,21 @@ class Prompts:
         comfort_str = comfort_labels.get(comfort, comfort)
 
         allocation = metrics.get("allocation", {})
-        alloc_str = ", ".join(
-            f"{k}: {v}%" for k, v in allocation.items()
-        ) if allocation else "—"
+        alloc_str = (
+            ", ".join(f"{k}: {v}%" for k, v in allocation.items())
+            if allocation
+            else "—"
+        )
 
         insurance_str = ""
         if has_life_ins is not None:
-            insurance_str += f"Life: {'Yes ' + fmt(life_cover) if has_life_ins else 'No'}"
+            insurance_str += (
+                f"Life: {'Yes ' + fmt(life_cover) if has_life_ins else 'No'}"
+            )
         if has_health_ins is not None:
-            insurance_str += f", Health: {'Yes ' + fmt(health_cover) if has_health_ins else 'No'}"
+            insurance_str += (
+                f", Health: {'Yes ' + fmt(health_cover) if has_health_ins else 'No'}"
+            )
 
         esop_str = "None"
         if has_esops:
