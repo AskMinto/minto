@@ -13,10 +13,21 @@ from ..core.config import ASSISTANT_DISCLAIMER
 from ..core.prompts import prompts
 from ..db.supabase import get_supabase_client
 from ..services.gemini import generate_response, GeminiNotConfigured
-from ..services.guardrails import append_disclaimer, contains_blocked_phrase, safe_response
+from ..services.guardrails import (
+    append_disclaimer,
+    contains_blocked_phrase,
+    safe_response,
+)
 from ..services.mem0 import add_memory, get_memory
 from ..services.portfolio import compute_portfolio
-from ..services.research_agent import run_research_agent, run_research_agent_stream, AgentNotConfigured, _make_profile_update_tool
+from ..services.research_agent import (
+    run_research_agent,
+    run_research_agent_stream,
+    AgentNotConfigured,
+    _make_profile_update_tool,
+)
+from ..core.config import ASSISTANT_DISCLAIMER, OPENAI_API_KEY
+import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -123,20 +134,11 @@ def get_messages(
     supabase = get_supabase_client(user.token)
     chat_id = _get_or_create_thread(supabase, user.user_id)
 
-    query = (
-        supabase.table("chat_messages")
-        .select("*")
-        .eq("chat_id", chat_id)
-    )
+    query = supabase.table("chat_messages").select("*").eq("chat_id", chat_id)
     if before:
         query = query.lt("created_at", before)
 
-    result = (
-        query
-        .order("created_at", desc=True)
-        .limit(limit)
-        .execute()
-    )
+    result = query.order("created_at", desc=True).limit(limit).execute()
     msgs = list(reversed(result.data or []))
     has_more = len(result.data or []) == limit
     return {"chat_id": chat_id, "messages": msgs, "has_more": has_more}
@@ -146,17 +148,16 @@ def _build_system_prompt(risk_profile: dict | None = None) -> str:
     return prompts.build_system_prompt(risk_profile)
 
 
-def _build_user_prompt(message: str, memory: str, portfolio: dict, financial_profile: dict | None = None) -> str:
+def _build_user_prompt(
+    message: str, memory: str, portfolio: dict, financial_profile: dict | None = None
+) -> str:
     return prompts.build_user_prompt(message, memory, portfolio, financial_profile)
 
 
 def _load_chat_context(supabase, user, chat_id: str):
     """Load holdings, portfolio, memory, history, and risk profile."""
     holdings = (
-        supabase.table("holdings")
-        .select("*")
-        .eq("user_id", user.user_id)
-        .execute()
+        supabase.table("holdings").select("*").eq("user_id", user.user_id).execute()
     ).data or []
     portfolio = compute_portfolio(holdings)
     memory = get_memory(user.user_id)
@@ -223,7 +224,9 @@ def _apply_guardrails(reply: str, widgets: list[dict]) -> tuple[str, list[dict]]
     return reply, widgets
 
 
-def _save_assistant_message(supabase, chat_id: str, user_id: str, content: str, widgets: list[dict]):
+def _save_assistant_message(
+    supabase, chat_id: str, user_id: str, content: str, widgets: list[dict]
+):
     """Persist the assistant message and update chat timestamp."""
     metadata = {"widgets": widgets} if widgets else {"widgets": []}
     supabase.table("chat_messages").insert(
@@ -263,7 +266,9 @@ def send_message(
 
     widgets: list[dict] = []
 
-    portfolio, memory, recent_history, risk_profile, financial_profile = _load_chat_context(supabase, user, chat_id)
+    portfolio, memory, recent_history, risk_profile, financial_profile = (
+        _load_chat_context(supabase, user, chat_id)
+    )
     prompt = _build_user_prompt(payload.content, memory, portfolio, financial_profile)
     system_prompt = _build_system_prompt(risk_profile)
 
@@ -289,8 +294,7 @@ def send_message(
             assistant_reply, widgets = _apply_guardrails(assistant_reply, [])
         except (GeminiNotConfigured, Exception):
             assistant_reply = (
-                "Something went wrong. Please try again.\n\n"
-                f"{ASSISTANT_DISCLAIMER}"
+                f"Something went wrong. Please try again.\n\n{ASSISTANT_DISCLAIMER}"
             )
 
     _save_assistant_message(supabase, chat_id, user.user_id, assistant_reply, widgets)
@@ -320,7 +324,9 @@ def send_message_stream(
         }
     ).execute()
 
-    portfolio, memory, recent_history, risk_profile, financial_profile = _load_chat_context(supabase, user, chat_id)
+    portfolio, memory, recent_history, risk_profile, financial_profile = (
+        _load_chat_context(supabase, user, chat_id)
+    )
     prompt = _build_user_prompt(payload.content, memory, portfolio, financial_profile)
     system_prompt = _build_system_prompt(risk_profile)
 
@@ -333,7 +339,10 @@ def send_message_stream(
         print("[MINTO] Stream starting")
         try:
             for event in run_research_agent_stream(
-                system_prompt, prompt, chat_history=recent_history, extra_tools=extra_tools
+                system_prompt,
+                prompt,
+                chat_history=recent_history,
+                extra_tools=extra_tools,
             ):
                 event_type = event.get("type", "")
 
@@ -347,22 +356,26 @@ def send_message_stream(
 
                 elif event_type == "tool_completed":
                     tool_widgets = event.get("widgets", [])
-                    print(f"[MINTO] Tool completed: {event.get('tool_name', '')}, widgets={len(tool_widgets)}")
+                    print(
+                        f"[MINTO] Tool completed: {event.get('tool_name', '')}, widgets={len(tool_widgets)}"
+                    )
                     if tool_widgets:
                         widgets.extend(tool_widgets)
 
                 elif event_type == "done":
                     full_content = event.get("content", "")
 
-            print(f"[MINTO] Before guardrails: content_len={len(full_content)}, widgets={len(widgets)}")
+            print(
+                f"[MINTO] Before guardrails: content_len={len(full_content)}, widgets={len(widgets)}"
+            )
             if full_content:
                 full_content, widgets = _apply_guardrails(full_content, widgets)
-            print(f"[MINTO] After guardrails: content_len={len(full_content)}, widgets={len(widgets)}")
+            print(
+                f"[MINTO] After guardrails: content_len={len(full_content)}, widgets={len(widgets)}"
+            )
 
         except (AgentNotConfigured, GeminiNotConfigured):
-            full_content = (
-                "AI is not configured yet. Please set GEMINI_API_KEY to enable chat responses."
-            )
+            full_content = "AI is not configured yet. Please set GEMINI_API_KEY to enable chat responses."
             data = json.dumps({"type": "token", "content": full_content})
             yield f"data: {data}\n\n"
 
@@ -375,8 +388,12 @@ def send_message_stream(
         # Save to DB BEFORE sending done
         if full_content:
             print(f"[MINTO] Saving: widgets={len(widgets)}")
-            _save_assistant_message(supabase, chat_id, user.user_id, full_content, widgets)
-            add_memory(user.user_id, f"User: {payload.content}\nAssistant: {full_content}")
+            _save_assistant_message(
+                supabase, chat_id, user.user_id, full_content, widgets
+            )
+            add_memory(
+                user.user_id, f"User: {payload.content}\nAssistant: {full_content}"
+            )
 
         done_data = json.dumps({"type": "done", "widgets": widgets})
         print(f"[MINTO] Done event: {done_data[:200]}")
@@ -391,3 +408,39 @@ def send_message_stream(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.get("/voice/token")
+async def get_voice_token(user: UserContext = Depends(get_user_context)):
+    """Fetch an ephemeral token for the OpenAI Realtime API (WebRTC)."""
+    if not OPENAI_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="OPENAI_API_KEY is not configured.",
+        )
+
+    try:
+        async with httpx.AsyncClient() as client:
+            # According to latest OpenAI docs for Realtime WebRTC:
+            # We call POST https://api.openai.com/v1/realtime/sessions with the model.
+            response = await client.post(
+                "https://api.openai.com/v1/realtime/sessions",
+                headers={
+                    "Authorization": f"Bearer {OPENAI_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "gpt-4o-realtime-preview-2024-12-17",
+                    "voice": "verse",
+                },
+                timeout=10.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+            return data
+    except Exception as e:
+        logger.error(f"Error fetching Realtime API token: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to fetch Realtime API token.",
+        )

@@ -10,7 +10,9 @@ def _get_env(name: str, default: str | None = None) -> str | None:
 
 
 SUPABASE_URL = _get_env("SUPABASE_URL") or _get_env("EXPO_PUBLIC_SUPABASE_URL")
-SUPABASE_ANON_KEY = _get_env("SUPABASE_ANON_KEY") or _get_env("EXPO_PUBLIC_SUPABASE_ANON_KEY")
+SUPABASE_ANON_KEY = _get_env("SUPABASE_ANON_KEY") or _get_env(
+    "EXPO_PUBLIC_SUPABASE_ANON_KEY"
+)
 SUPABASE_JWKS_URL = _get_env("SUPABASE_JWKS_URL")
 SUPABASE_JWT_SECRET = _get_env("SUPABASE_JWT_SECRET")
 
@@ -27,14 +29,16 @@ MEM0_AUTH_HEADER = _get_env("MEM0_AUTH_HEADER", "Authorization")
 MEM0_AUTH_SCHEME = _get_env("MEM0_AUTH_SCHEME", "Bearer")
 MEM0_PROJECT_HEADER = _get_env("MEM0_PROJECT_HEADER", "x-project-key")
 
+OPENAI_API_KEY = _get_env("OPENAI_API_KEY")
+
 KITE_API_KEY = _get_env("KITE_API_KEY")
 KITE_API_SECRET = _get_env("KITE_API_SECRET")
 KITE_REDIRECT_URL = _get_env("KITE_REDIRECT_URL")
 
 MFAPI_BASE_URL = _get_env("MFAPI_BASE_URL", "https://api.mfapi.in")
 
-YFINANCE_MAX_RESULTS = int(_get_env("YFINANCE_MAX_RESULTS", "12"))
-YFINANCE_NEWS_COUNT = int(_get_env("YFINANCE_NEWS_COUNT", "6"))
+YFINANCE_MAX_RESULTS = int(_get_env("YFINANCE_MAX_RESULTS", "12") or "12")
+YFINANCE_NEWS_COUNT = int(_get_env("YFINANCE_NEWS_COUNT", "6") or "6")
 
 DISCLAIMER_VERSION = _get_env("DISCLAIMER_VERSION", "v1")
 ASSISTANT_DISCLAIMER = _get_env(
