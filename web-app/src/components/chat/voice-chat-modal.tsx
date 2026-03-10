@@ -123,17 +123,16 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
              (async () => {
                  let result = "";
                  try {
-                     if (name === "get_current_stock_price") {
-                         const res = await fetch(`/api/proxy/prices/quote?symbol=${args.symbol}`);
-                         const data = await res.json();
-                         result = JSON.stringify(data);
-                     } else if (name === "get_mf_nav") {
-                         const res = await fetch(`/api/proxy/mf/${args.scheme_code}/detail`);
-                         const data = await res.json();
-                         result = JSON.stringify(data);
-                     } else {
-                         result = JSON.stringify({ error: "Unknown function" });
-                     }
+                     const res = await fetch(`/api/proxy/chat/voice/tool`, {
+                         method: "POST",
+                         headers: {
+                             "Content-Type": "application/json",
+                             "Authorization": `Bearer ${session.access_token}`
+                         },
+                         body: JSON.stringify({ name, arguments: args })
+                     });
+                     const data = await res.json();
+                     result = JSON.stringify(data);
                  } catch (err: any) {
                      result = JSON.stringify({ error: err.message });
                  }
@@ -182,6 +181,26 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
 
       // Successfully connected
       setStatus("listening");
+
+      dc.onopen = () => {
+         if (tokenData.recent_history && Array.isArray(tokenData.recent_history)) {
+             for (const msg of tokenData.recent_history) {
+                 if (!msg.content) continue;
+                 const role = msg.role === "user" ? "user" : "assistant";
+                 dc.send(JSON.stringify({
+                     type: "conversation.item.create",
+                     item: {
+                         type: "message",
+                         role: role,
+                         content: [{
+                             type: role === "user" ? "input_text" : "text",
+                             text: msg.content
+                         }]
+                     }
+                 }));
+             }
+         }
+      };
 
     } catch (err: any) {
       console.error(err);

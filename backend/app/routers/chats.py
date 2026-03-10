@@ -421,8 +421,8 @@ async def get_voice_token(user: UserContext = Depends(get_user_context)):
 
     supabase = get_supabase_client(user.token)
     chat_id = _get_or_create_thread(supabase, user.user_id)
-    portfolio, memory, _, risk_profile, financial_profile = _load_chat_context(
-        supabase, user, chat_id
+    portfolio, memory, recent_history, risk_profile, financial_profile = (
+        _load_chat_context(supabase, user, chat_id)
     )
 
     system_prompt = _build_system_prompt(risk_profile)
@@ -461,17 +461,88 @@ async def get_voice_token(user: UserContext = Depends(get_user_context)):
                         },
                         {
                             "type": "function",
-                            "name": "get_mf_nav",
+                            "name": "_get_mf_nav",
                             "description": "Get the current NAV for a mutual fund.",
                             "parameters": {
                                 "type": "object",
                                 "properties": {
                                     "scheme_code": {
-                                        "type": "string",
+                                        "type": "integer",
                                         "description": "The mutual fund scheme code",
                                     }
                                 },
                                 "required": ["scheme_code"],
+                            },
+                        },
+                        {
+                            "type": "function",
+                            "name": "_search_instrument",
+                            "description": "Search for stocks or mutual fund schemes by name, symbol, or ISIN.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {"query": {"type": "string"}},
+                                "required": ["query"],
+                            },
+                        },
+                        {
+                            "type": "function",
+                            "name": "_get_market_overview",
+                            "description": "Get current Indian market overview including Nifty 50, Sensex, and Bank Nifty.",
+                            "parameters": {"type": "object", "properties": {}},
+                        },
+                        {
+                            "type": "function",
+                            "name": "_update_financial_profile",
+                            "description": "Update the user's financial profile / balance sheet.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "updates": {
+                                        "type": "string",
+                                        "description": "JSON string of field:value pairs",
+                                    }
+                                },
+                                "required": ["updates"],
+                            },
+                        },
+                        {
+                            "type": "function",
+                            "name": "get_company_news",
+                            "description": "Get latest news for a specific company symbol.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {"symbol": {"type": "string"}},
+                                "required": ["symbol"],
+                            },
+                        },
+                        {
+                            "type": "function",
+                            "name": "web_search",
+                            "description": "Search the web using DuckDuckGo.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {"query": {"type": "string"}},
+                                "required": ["query"],
+                            },
+                        },
+                        {
+                            "type": "function",
+                            "name": "search_news",
+                            "description": "Search latest news on DuckDuckGo.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {"query": {"type": "string"}},
+                                "required": ["query"],
+                            },
+                        },
+                        {
+                            "type": "function",
+                            "name": "read_article",
+                            "description": "Read and extract content from a URL.",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {"url": {"type": "string"}},
+                                "required": ["url"],
                             },
                         },
                     ],
@@ -479,10 +550,83 @@ async def get_voice_token(user: UserContext = Depends(get_user_context)):
                 timeout=10.0,
             )
             response.raise_for_status()
-            return response.json()
+            data = response.json()
+            data["recent_history"] = recent_history
+            return data
     except Exception as e:
         logger.error(f"Error fetching Realtime API token: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to fetch Realtime API token.",
         )
+
+
+class ToolCallPayload(BaseModel):
+    name: str
+    arguments: dict
+
+
+@router.post("/voice/tool")
+async def execute_voice_tool(
+    payload: ToolCallPayload, user: UserContext = Depends(get_user_context)
+):
+    """Proxy tool calls from the voice agent to the backend services."""
+    from ..services.research_agent import (
+        _get_mf_nav,
+        _search_instrument,
+        _get_market_overview,
+        _make_profile_update_tool,
+    )
+
+    try:
+        if payload.name == "get_current_stock_price":
+            from ..services.yfinance_service import get_quote
+
+            symbol = str(payload.arguments.get("symbol", ""))
+            quote = get_quote(symbol, None)
+            return quote or {"error": "Could not fetch quote"}
+        elif payload.name == "_get_mf_nav":
+            scheme_code = int(payload.arguments.get("scheme_code", 0))
+            return json.loads(_get_mf_nav(scheme_code))
+        elif payload.name == "_search_instrument":
+            query = str(payload.arguments.get("query", ""))
+            return json.loads(_search_instrument(query))
+        elif payload.name == "_get_market_overview":
+            return json.loads(_get_market_overview())
+        elif payload.name == "_update_financial_profile":
+            updates = str(payload.arguments.get("updates", "{}"))
+            supabase = get_supabase_client(user.token)
+            tool = _make_profile_update_tool(supabase, user.user_id)
+            return {"result": tool(updates)}
+        elif payload.name == "get_company_news":
+            from ..services.yfinance_service import get_news
+
+            symbol = str(payload.arguments.get("symbol", ""))
+            return get_news(symbol)
+        elif payload.name == "web_search":
+            from agno.tools.duckduckgo import DuckDuckGoTools
+
+            query = str(payload.arguments.get("query", ""))
+            tool = DuckDuckGoTools(
+                enable_search=True, fixed_max_results=5, region="in-en"
+            )
+            return tool.duckduckgo_search(query)
+        elif payload.name == "search_news":
+            from agno.tools.duckduckgo import DuckDuckGoTools
+
+            query = str(payload.arguments.get("query", ""))
+            tool = DuckDuckGoTools(
+                enable_news=True, fixed_max_results=5, region="in-en"
+            )
+            return tool.duckduckgo_news(query)
+        elif payload.name == "read_article":
+            from agno.tools.newspaper4k import Newspaper4kTools
+
+            url = str(payload.arguments.get("url", ""))
+            tool = Newspaper4kTools(include_summary=True, article_length=3000)
+            return tool.read_article(url)
+        else:
+            return {"error": f"Unknown tool: {payload.name}"}
+    except Exception as e:
+        logger.error(f"Error executing tool {payload.name}: {e}")
+        return {"error": str(e)}
