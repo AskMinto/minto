@@ -13,15 +13,15 @@ interface Props {
 interface TranscriptLine {
   role: "user" | "agent";
   text: string;
+  done?: boolean;
 }
 
 export function VoiceChatModal({ isOpen, onClose }: Props) {
   const [status, setStatus] = useState<
     "idle" | "connecting" | "connected" | "error" | "listening" | "speaking" | "thinking"
   >("idle");
-  // Two-line rolling transcript: prev line (completed) + current line (live)
-  const [prevLine, setPrevLine] = useState<TranscriptLine | null>(null);
-  const [currentLine, setCurrentLine] = useState<TranscriptLine | null>(null);
+  // Single array of transcript lines — we always display the last two
+  const [lines, setLines] = useState<TranscriptLine[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>("");
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -55,16 +55,14 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
       audioElRef.current.srcObject = null;
     }
     setStatus("idle");
-    setPrevLine(null);
-    setCurrentLine(null);
+    setLines([]);
     setErrorMessage("");
   };
 
   const startSession = async () => {
     try {
       setStatus("connecting");
-      setPrevLine(null);
-      setCurrentLine(null);
+      setLines([]);
       setErrorMessage("");
 
       const supabase = createClient();
@@ -113,35 +111,42 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
         try {
           const event = JSON.parse(e.data);
           
-          if (event.type === "response.output_audio_transcript.delta") {
-            // Agent speaking — stream delta into current line
-            setCurrentLine((prev) =>
-              prev?.role === "agent"
-                ? { role: "agent", text: prev.text + event.delta }
-                : { role: "agent", text: event.delta }
-            );
+          if (event.type === "response.audio_transcript.delta" || event.type === "response.output_audio_transcript.delta") {
+            // Agent speaking — append delta to current agent line (or start one)
+            setLines((prev) => {
+              const last = prev[prev.length - 1];
+              if (last && !last.done && last.role === "agent") {
+                // Append to existing agent line
+                return [...prev.slice(0, -1), { ...last, text: last.text + event.delta }];
+              }
+              // Start a new agent line
+              return [...prev, { role: "agent", text: event.delta }];
+            });
             setStatus("speaking");
-          } else if (event.type === "response.output_audio_transcript.done") {
-            // Agent finished — promote current to prev, clear current
-            setCurrentLine((prev) => {
-              if (prev) setPrevLine(prev);
-              return null;
+          } else if (event.type === "response.audio_transcript.done" || event.type === "response.output_audio_transcript.done") {
+            // Agent finished — mark current line done
+            setLines((prev) => {
+              const last = prev[prev.length - 1];
+              if (last && last.role === "agent") {
+                return [...prev.slice(0, -1), { ...last, done: true }];
+              }
+              return prev;
             });
             setStatus("listening");
           } else if (event.type === "input_audio_buffer.speech_started") {
             // User started speaking — start a new user line
-            setCurrentLine((prev) => {
-              if (prev) setPrevLine(prev);
-              return { role: "user", text: "" };
-            });
+            setLines((prev) => [...prev, { role: "user", text: "" }]);
             setStatus("listening");
           } else if (event.type === "conversation.item.input_audio_transcription.completed") {
-            // User finished — finalise their line text
-            const finalText = event.transcript ?? "";
-            setCurrentLine((prev) => {
-              const updated: TranscriptLine = { role: "user", text: finalText };
-              if (prev) setPrevLine(prev);
-              return updated;
+            // User finished — fill in the final transcript text
+            const finalText = (event.transcript ?? "").trim();
+            if (!finalText) return;
+            setLines((prev) => {
+              const last = prev[prev.length - 1];
+              if (last && last.role === "user") {
+                return [...prev.slice(0, -1), { ...last, text: finalText, done: true }];
+              }
+              return [...prev, { role: "user", text: finalText, done: true }];
             });
           } else if (event.type === "response.done") {
             // Canonical handler for tool calls — inspect all output items
@@ -151,7 +156,6 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
             if (functionCalls.length === 0) return;
 
             setStatus("thinking");
-            setCurrentLine(null);
 
             (async () => {
               // Execute all tool calls in parallel, then send a single response.create
@@ -331,40 +335,43 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
         </div>
 
         {/* Two-line rolling transcript */}
-        <div className="w-full px-6 pb-1" style={{ minHeight: 48 }}>
-          {status === "connecting" ? (
-            <p className="text-center text-minto-text-secondary text-sm">Connecting to Minto...</p>
-          ) : status === "error" ? (
-            <p className="text-center text-minto-negative text-sm">{errorMessage}</p>
-          ) : status === "thinking" ? (
-            <>
-              <p className="text-center text-minto-text-muted text-sm opacity-50 truncate">&nbsp;</p>
-              <p className="text-center text-minto-accent text-sm font-medium animate-pulse">Researching...</p>
-            </>
-          ) : (
-            <>
-              {/* Prev line — dimmed, role-coloured */}
-              <p className={`text-center text-sm truncate transition-all duration-300 ${
-                prevLine?.role === "user"
-                  ? "text-minto-accent/50"
-                  : "text-minto-text-muted/50"
-              }`}>
-                {prevLine?.text || "\u00A0"}
-              </p>
-              {/* Current live line */}
-              <p className={`text-center text-sm font-medium truncate transition-all duration-150 ${
-                currentLine?.role === "user"
-                  ? "text-minto-accent"
-                  : currentLine?.role === "agent"
-                  ? "text-minto-text"
-                  : "text-minto-text-muted animate-pulse"
-              }`}>
-                {currentLine?.text ||
-                  (status === "listening" ? "Listening..." : status === "speaking" ? "Speaking..." : "\u00A0")}
-              </p>
-            </>
-          )}
-        </div>
+        {(() => {
+          const prevLine = lines.length >= 2 ? lines[lines.length - 2] : null;
+          const currentLine = lines.length >= 1 ? lines[lines.length - 1] : null;
+          return (
+            <div className="w-full px-6 pb-1" style={{ minHeight: 48 }}>
+              {status === "connecting" ? (
+                <p className="text-center text-minto-text-secondary text-sm">Connecting to Minto...</p>
+              ) : status === "error" ? (
+                <p className="text-center text-minto-negative text-sm">{errorMessage}</p>
+              ) : status === "thinking" ? (
+                <>
+                  <p className="text-center text-minto-text-muted text-sm opacity-50 truncate">&nbsp;</p>
+                  <p className="text-center text-minto-accent text-sm font-medium animate-pulse">Researching...</p>
+                </>
+              ) : (
+                <>
+                  {/* Prev line — dimmed */}
+                  <p className={`text-center text-sm truncate transition-colors duration-300 ${
+                    prevLine?.role === "user" ? "text-minto-accent/50" : "text-minto-text-muted/50"
+                  }`}>
+                    {prevLine?.text || "\u00A0"}
+                  </p>
+                  {/* Current live line */}
+                  <p className={`text-center text-sm font-medium truncate transition-colors duration-150 ${
+                    currentLine?.role === "user"
+                      ? "text-minto-accent"
+                      : currentLine?.role === "agent"
+                      ? "text-minto-text"
+                      : "text-minto-text-muted animate-pulse"
+                  }`}>
+                    {currentLine?.text || (status === "listening" ? "Listening..." : status === "speaking" ? "Speaking..." : "\u00A0")}
+                  </p>
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* End call / retry button */}
         <div className="flex justify-center py-5">
