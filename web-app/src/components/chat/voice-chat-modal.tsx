@@ -240,82 +240,136 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
 
   if (!isOpen) return null;
 
+  const isActive = status === "listening" || status === "speaking" || status === "thinking";
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="glass-card shadow-2xl rounded-[2rem] w-full max-w-md overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-white/30">
-          <h3 className="text-minto-text font-medium flex items-center gap-2">
-            <Mic className="w-5 h-5 text-minto-accent" />
-            Voice Chat
-          </h3>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 backdrop-blur-xl animate-in fade-in duration-300">
+      {/* Backdrop click to close */}
+      <div className="absolute inset-0" onClick={onClose} />
+
+      <div className="glass-elevated relative z-10 rounded-[2.5rem] w-full max-w-lg mx-4 flex flex-col overflow-hidden shadow-2xl border border-white/40"
+        style={{ minHeight: 520 }}
+      >
+        {/* Top bar */}
+        <div className="flex items-center justify-between px-7 pt-7 pb-2">
+          <div className="flex items-center gap-2">
+            <Mic className="w-4 h-4 text-minto-accent" />
+            <span className="text-minto-text text-sm font-medium tracking-wide">Voice Chat</span>
+          </div>
           <button
             onClick={onClose}
-            className="text-minto-text-muted hover:text-minto-text transition-colors p-1"
+            className="w-8 h-8 rounded-full bg-white/50 hover:bg-white/80 border border-white/60 flex items-center justify-center text-minto-text-muted hover:text-minto-text transition-all"
           >
-            <X size={20} />
+            <X size={15} />
           </button>
         </div>
 
-        {/* Body */}
-        <div className="flex-1 flex flex-col items-center justify-center min-h-[300px] p-8 relative overflow-hidden">
-          
-          {/* Animated rings for active state */}
-          {(status === "listening" || status === "speaking" || status === "thinking") && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className={`w-32 h-32 rounded-full border-2 border-minto-accent/30 animate-ping absolute ${status === "speaking" ? 'duration-1000' : status === "thinking" ? 'duration-2000' : 'duration-3000'}`} />
-              <div className={`w-48 h-48 rounded-full border-2 border-minto-accent/10 animate-ping absolute ${status === "speaking" ? 'duration-1000 delay-150' : status === "thinking" ? 'duration-2000 delay-200' : 'duration-3000 delay-300'}`} />
-            </div>
-          )}
+        {/* Main body — orb + rings + status */}
+        <div className="flex-1 flex flex-col items-center justify-center px-8 py-10 relative overflow-hidden">
 
-          <div className="z-10 flex flex-col items-center w-full">
+          {/* Layered ambient rings — always render, opacity driven by state */}
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            {/* Ring 1 */}
+            <div className={`absolute rounded-full border transition-all duration-700 ${
+              isActive
+                ? `border-minto-accent/25 ${status === "speaking" ? "w-52 h-52 animate-ping duration-[900ms]" : status === "thinking" ? "w-52 h-52 animate-ping duration-[1800ms]" : "w-52 h-52 animate-ping duration-[2800ms]"}`
+                : "w-40 h-40 border-minto-accent/5 opacity-0"
+            }`} />
+            {/* Ring 2 */}
+            <div className={`absolute rounded-full border transition-all duration-700 ${
+              isActive
+                ? `border-minto-accent/15 ${status === "speaking" ? "w-72 h-72 animate-ping duration-[900ms] delay-100" : status === "thinking" ? "w-72 h-72 animate-ping duration-[1800ms] delay-150" : "w-72 h-72 animate-ping duration-[2800ms] delay-200"}`
+                : "w-56 h-56 border-minto-accent/5 opacity-0"
+            }`} />
+            {/* Ring 3 — outermost, very faint */}
+            <div className={`absolute rounded-full border transition-all duration-700 ${
+              isActive
+                ? `border-minto-accent/8 ${status === "speaking" ? "w-96 h-96 animate-ping duration-[900ms] delay-200" : status === "thinking" ? "w-96 h-96 animate-ping duration-[1800ms] delay-300" : "w-96 h-96 animate-ping duration-[2800ms] delay-500"}`
+                : "opacity-0"
+            }`} />
+          </div>
+
+          {/* Central orb */}
+          <div className="z-10 flex flex-col items-center gap-8 w-full">
             {status === "connecting" ? (
-              <div className="flex flex-col items-center gap-4 text-minto-accent">
-                <Loader2 className="w-12 h-12 animate-spin" />
-                <p className="text-minto-text-secondary text-sm">Connecting to AI...</p>
-              </div>
+              <>
+                <div className="w-32 h-32 rounded-full bg-white/40 border border-white/60 flex items-center justify-center shadow-lg">
+                  <Loader2 className="w-12 h-12 text-minto-accent animate-spin" />
+                </div>
+                <p className="text-minto-text-secondary text-base">Connecting to Minto...</p>
+              </>
             ) : status === "error" ? (
-              <div className="flex flex-col items-center gap-4 text-minto-negative text-center">
-                <MicOff className="w-12 h-12" />
-                <p className="text-sm">{errorMessage}</p>
-                <button 
-                  onClick={startSession}
-                  className="mt-2 px-4 py-2 bg-minto-negative/10 hover:bg-minto-negative/20 rounded-full text-minto-negative text-sm transition-colors"
-                >
-                  Try Again
-                </button>
-              </div>
+              <>
+                <div className="w-32 h-32 rounded-full bg-red-50/60 border border-red-200/50 flex items-center justify-center shadow-lg">
+                  <MicOff className="w-12 h-12 text-minto-negative" />
+                </div>
+                <div className="text-center space-y-3">
+                  <p className="text-minto-negative text-sm max-w-xs">{errorMessage}</p>
+                  <button
+                    onClick={startSession}
+                    className="px-5 py-2 bg-minto-negative/10 hover:bg-minto-negative/20 rounded-full text-minto-negative text-sm transition-colors"
+                  >
+                    Try Again
+                  </button>
+                </div>
+              </>
             ) : (
-              <div className="flex flex-col items-center w-full">
-                <div 
-                  className={`w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 ${
-                    status === "speaking" 
-                      ? "bg-minto-accent text-white scale-110 shadow-[0_0_30px_rgba(75,172,130,0.4)]"
+              <>
+                {/* The main mic orb */}
+                <div
+                  className={`w-32 h-32 rounded-full flex items-center justify-center transition-all duration-500 ${
+                    status === "speaking"
+                      ? "bg-minto-accent text-white scale-110 shadow-[0_0_60px_rgba(75,172,130,0.45)]"
                       : status === "thinking"
-                      ? "bg-minto-accent/30 text-minto-accent scale-105 border border-minto-accent/40 shadow-sm"
-                      : "bg-white/40 text-minto-text-muted scale-100 border border-white/50 shadow-sm"
+                      ? "bg-minto-accent/20 text-minto-accent scale-105 border-2 border-minto-accent/40 shadow-[0_0_40px_rgba(75,172,130,0.2)]"
+                      : "bg-white/50 text-minto-text-muted border border-white/70 shadow-lg"
                   }`}
                 >
-                  <Mic className="w-10 h-10" />
+                  <Mic className={`transition-all duration-500 ${status === "speaking" ? "w-14 h-14" : "w-12 h-12"}`} />
                 </div>
-                
-                <div className="mt-8 text-center h-20 w-full flex items-center justify-center">
+
+                {/* Status label + transcript */}
+                <div className="text-center w-full space-y-2 min-h-[64px] flex flex-col items-center justify-center">
                   {status === "thinking" && (
-                    <p className="text-minto-text-secondary text-lg animate-pulse">Researching...</p>
+                    <>
+                      <p className="text-minto-accent font-medium text-base animate-pulse">Researching...</p>
+                      <p className="text-minto-text-muted text-xs">Looking that up for you</p>
+                    </>
+                  )}
+                  {status === "speaking" && transcript && (
+                    <p className="text-minto-text text-base font-medium leading-snug max-w-xs">
+                      {transcript}
+                    </p>
+                  )}
+                  {status === "speaking" && !transcript && (
+                    <p className="text-minto-accent font-medium text-base animate-pulse">Speaking...</p>
                   )}
                   {status === "listening" && !transcript && (
-                    <p className="text-minto-text-muted text-lg animate-pulse">Listening...</p>
+                    <p className="text-minto-text-muted text-base animate-pulse">Listening...</p>
                   )}
-                  {transcript && status !== "thinking" && (
-                    <p className="text-minto-text text-lg font-medium tracking-wide">
+                  {status === "listening" && transcript && (
+                    <p className="text-minto-text text-base font-medium leading-snug max-w-xs">
                       {transcript}
                     </p>
                   )}
                 </div>
-              </div>
+              </>
             )}
           </div>
         </div>
+
+        {/* Bottom — end call button */}
+        {(status === "listening" || status === "speaking" || status === "thinking") && (
+          <div className="flex justify-center pb-8 pt-2">
+            <button
+              onClick={onClose}
+              className="flex items-center gap-2 px-6 py-3 rounded-full bg-minto-negative/10 hover:bg-minto-negative/20 border border-minto-negative/20 text-minto-negative text-sm font-medium transition-all hover:scale-105"
+            >
+              <MicOff size={16} />
+              End call
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
