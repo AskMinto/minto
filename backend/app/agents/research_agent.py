@@ -173,11 +173,23 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
             seen_titles.add(n["title"])
             unique_news.append(n)
 
+    alert_setup: dict | None = None
+    for tool_exec in (run_output.tools or []):
+        if tool_exec.tool_name == "request_alert_widget":
+            try:
+                result = json.loads(tool_exec.result or "{}")
+                if isinstance(result, dict) and result.get("__widget") == "alert_setup":
+                    alert_setup = {k: v for k, v in result.items() if k != "__widget"}
+            except (json.JSONDecodeError, TypeError):
+                pass
+
     widgets: list[dict] = []
     if unique_prices:
         widgets.append({"type": "price_summary", "data": {"items": unique_prices}})
     if unique_news:
         widgets.append({"type": "news_summary", "data": {"items": unique_news}})
+    if alert_setup is not None:
+        widgets.append({"type": "alert_setup", "data": alert_setup})
     return widgets
 
 

@@ -4,6 +4,7 @@ import { useRef, useEffect, useCallback } from "react";
 import { MessageBubble } from "./message-bubble";
 import { WidgetPrice } from "./widget-price";
 import { WidgetNews } from "./widget-news";
+import { WidgetAlertSetup } from "./widget-alert-setup";
 import { Spinner } from "@/components/ui/spinner";
 
 interface ChatMessage {
@@ -94,8 +95,10 @@ export function MessageList({ messages, sending, onLoadOlder, loadingMore, hasMo
                 const seenPriceKeys = new Set<string>();
                 const seenNewsTitles = new Set<string>();
 
+                let alertSetupData: Record<string, unknown> | null = null;
+
                 for (const w of widgets) {
-                  const typed = w as { type: string; data?: { items?: Record<string, unknown>[] } };
+                  const typed = w as { type: string; data?: Record<string, unknown> & { items?: Record<string, unknown>[] } };
                   const items = typed.data?.items || [];
                   if (typed.type === "price_summary") {
                     for (const item of items) {
@@ -113,6 +116,8 @@ export function MessageList({ messages, sending, onLoadOlder, loadingMore, hasMo
                         allNews.push(item);
                       }
                     }
+                  } else if (typed.type === "alert_setup") {
+                    alertSetupData = typed.data || {};
                   }
                 }
 
@@ -123,6 +128,9 @@ export function MessageList({ messages, sending, onLoadOlder, loadingMore, hasMo
                     )}
                     {allNews.length > 0 && (
                       <WidgetNews data={{ items: allNews as never[] }} />
+                    )}
+                    {alertSetupData && (
+                      <WidgetAlertSetup data={alertSetupData as never} />
                     )}
                   </div>
                 );

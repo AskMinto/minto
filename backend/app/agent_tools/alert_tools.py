@@ -111,4 +111,41 @@ def make_alert_tools(supabase_client, user_id: str):
             logger.error(f"cancel_alert error: {e}")
             return json.dumps({"success": False, "error": str(e)})
 
-    return create_alert, list_alerts, cancel_alert
+    def request_alert_widget(
+        display_name: str | None = None,
+        symbol: str | None = None,
+        exchange: str | None = None,
+        scheme_code: int | None = None,
+        alert_type: str | None = None,
+        target_value: float | None = None,
+    ) -> str:
+        """Request an interactive alert-setup widget to be shown in chat.
+
+        Call this instead of create_alert when the user's intent is clear but
+        information is incomplete (missing instrument, condition, or target).
+        Also call it when the user says something vague like 'set an alert'
+        with no further details. Prefill whatever you know and the user will
+        complete the rest in the widget.
+
+        Args:
+            display_name: Human-readable name if known (e.g. "Infosys").
+            symbol: Ticker if known (e.g. "INFY").
+            exchange: "NSE" or "BSE" if known.
+            scheme_code: MFAPI scheme code if it's a mutual fund.
+            alert_type: One of 'above', 'below', 'pct_change_up', 'pct_change_down' if known.
+            target_value: Target price or percentage if known.
+
+        Returns:
+            Sentinel JSON that triggers the alert setup widget in the UI.
+        """
+        return json.dumps({
+            "__widget": "alert_setup",
+            "display_name": display_name,
+            "symbol": symbol,
+            "exchange": exchange,
+            "scheme_code": scheme_code,
+            "alert_type": alert_type,
+            "target_value": target_value,
+        })
+
+    return create_alert, list_alerts, cancel_alert, request_alert_widget

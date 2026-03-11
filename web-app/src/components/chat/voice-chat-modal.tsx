@@ -278,8 +278,8 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
       {/* Backdrop click to close */}
       <div className="absolute inset-0" onClick={onClose} />
 
-      {/* Floating card — compact, centered, not anchored to any edge */}
-      <div className="glass-elevated relative z-10 rounded-[2rem] w-[360px] flex flex-col items-center shadow-2xl border border-white/40 overflow-hidden">
+      {/* Floating card — centered, not anchored to any edge */}
+      <div className="glass-elevated relative z-10 rounded-[2rem] w-[420px] flex flex-col items-center shadow-2xl border border-white/40 overflow-hidden">
 
         {/* Close button — top right */}
         <button
@@ -296,7 +296,7 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
         </div>
 
         {/* Orb area with rings */}
-        <div className="relative flex items-center justify-center w-full" style={{ height: 260 }}>
+        <div className="relative flex items-center justify-center w-full" style={{ height: 300 }}>
 
           {/* Ambient rings */}
           {isActive && (
@@ -339,35 +339,35 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
           const prevLine = lines.length >= 2 ? lines[lines.length - 2] : null;
           const currentLine = lines.length >= 1 ? lines[lines.length - 1] : null;
           return (
-            <div className="w-full px-6 pb-1" style={{ minHeight: 48 }}>
+            <div className="w-full px-7 pb-2" style={{ minHeight: 80 }}>
               {status === "connecting" ? (
-                <p className="text-center text-minto-text-secondary text-sm">Connecting to Minto...</p>
+                <p className="text-center text-minto-text-secondary text-base">Connecting to Minto...</p>
               ) : status === "error" ? (
-                <p className="text-center text-minto-negative text-sm">{errorMessage}</p>
+                <p className="text-center text-minto-negative text-base">{errorMessage}</p>
               ) : status === "thinking" ? (
-                <>
-                  <p className="text-center text-minto-text-muted text-sm opacity-50 truncate">&nbsp;</p>
-                  <p className="text-center text-minto-accent text-sm font-medium animate-pulse">Researching...</p>
-                </>
+                <div style={{ minHeight: 80 }} className="flex flex-col justify-center">
+                  <p className="text-center text-minto-text-muted/40 text-sm leading-snug">&nbsp;</p>
+                  <p className="text-center text-minto-accent text-base font-medium animate-pulse mt-1">Researching...</p>
+                </div>
               ) : (
-                <>
-                  {/* Prev line — dimmed */}
-                  <p className={`text-center text-sm truncate transition-colors duration-300 ${
-                    prevLine?.role === "user" ? "text-minto-accent/50" : "text-minto-text-muted/50"
-                  }`}>
+                <div style={{ minHeight: 80 }} className="flex flex-col justify-end gap-1.5">
+                  {/* Prev line — dimmed, wraps up to 2 lines */}
+                  <p className={`text-center text-sm leading-snug overflow-hidden transition-colors duration-300 ${
+                    prevLine?.role === "user" ? "text-minto-accent/45" : "text-minto-text-muted/45"
+                  }`} style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
                     {prevLine?.text || "\u00A0"}
                   </p>
-                  {/* Current live line */}
-                  <p className={`text-center text-sm font-medium truncate transition-colors duration-150 ${
+                  {/* Current live line — streams in, wraps to 2 lines */}
+                  <p className={`text-center text-[15px] font-semibold leading-snug overflow-hidden transition-colors duration-150 ${
                     currentLine?.role === "user"
                       ? "text-minto-accent"
                       : currentLine?.role === "agent"
                       ? "text-minto-text"
                       : "text-minto-text-muted animate-pulse"
-                  }`}>
+                  }`} style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
                     {currentLine?.text || (status === "listening" ? "Listening..." : status === "speaking" ? "Speaking..." : "\u00A0")}
                   </p>
-                </>
+                </div>
               )}
             </div>
           );
