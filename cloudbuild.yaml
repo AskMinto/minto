@@ -36,7 +36,7 @@ steps:
         KITE_API_SECRET=REDACTED_KITE_API_SECRET,
         KITE_REDIRECT_URL=minto://zerodha-callback
       - '--set-secrets'
-      - 'OPENAI_API_KEY=projects/557303266732/secrets/OPENAI_API_KEY:latest'
+      - 'OPENAI_API_KEY=projects/557303266732/secrets/OPENAI_API_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=projects/557303266732/secrets/SUPABASE_SERVICE_ROLE_KEY:latest'
       - --platform
       - managed
       - --allow-unauthenticated
