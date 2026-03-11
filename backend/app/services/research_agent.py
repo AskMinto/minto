@@ -6,6 +6,9 @@ from typing import Any, Iterator
 
 from agno.agent import Agent, RunOutput, RunEvent
 from agno.models.google import Gemini
+from agno.team import Team
+from agno.team.mode import TeamMode
+from agno.run.team import TeamRunEvent
 from agno.tools.yfinance import YFinanceTools
 from agno.tools.newspaper4k import Newspaper4kTools
 from agno.tools.duckduckgo import DuckDuckGoTools
@@ -169,7 +172,7 @@ def _make_profile_update_tool(supabase_client, user_id: str):
     return _update_financial_profile
 
 
-def _build_agent(system_prompt: str, chat_history: list[dict] | None = None, extra_tools: list | None = None) -> Agent:
+def _build_research_agent(system_prompt: str, chat_history: list[dict] | None = None, extra_tools: list | None = None) -> Agent:
     """Build an Agno Agent with tools for financial research."""
     if not GEMINI_API_KEY:
         raise AgentNotConfigured("GEMINI_API_KEY is not configured")
@@ -329,32 +332,166 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
     return widgets
 
 
+def _build_minto_team(
+    system_prompt: str,
+    chat_history: list[dict] | None = None,
+    extra_tools: list | None = None,
+    supabase_client: Any = None,
+    user_id: str = "",
+) -> Team:
+    """Build a route-mode Agno Team with Research and Alert specialist agents."""
+    from .alert_agent import _make_alert_agent
+
+    research_agent = _build_research_agent(system_prompt, chat_history, extra_tools)
+    alert_agent = _make_alert_agent(supabase_client, user_id)
+
+    cfg = prompts.raw.get("team_router", {}).get("config", {})
+    router_instructions = prompts.raw.get("team_router", {}).get("instructions", [])
+
+    return Team(
+        name="Minto Team",
+        mode=TeamMode.route,
+        model=Gemini(
+            id=cfg.get("model", "gemini-3-flash-preview"),
+            temperature=cfg.get("temperature", 0.1),
+        ),
+        members=[research_agent, alert_agent],
+        instructions=router_instructions,
+        show_members_responses=False,
+        markdown=False,
+        add_datetime_to_context=True,
+        timezone_identifier="Asia/Kolkata",
+    )
+
+
+def _set_agent_history(agent: Agent, chat_history: list[dict] | None) -> None:
+    """Attach chat history to an agent as additional_input."""
+    history_messages = [
+        {"role": m["role"], "content": m["content"]}
+        for m in (chat_history or [])
+        if m.get("content")
+    ]
+    if history_messages:
+        agent.additional_input = history_messages
+
+
+def run_team(
+    system_prompt: str,
+    user_prompt: str,
+    chat_history: list[dict] | None = None,
+    extra_tools: list | None = None,
+    supabase_client: Any = None,
+    user_id: str = "",
+) -> tuple[str, list[dict]]:
+    """Run the Minto Agno Team (route mode) and return (reply_text, widgets).
+
+    Routes to Research Agent for market/portfolio questions and Alert Agent for
+    alert management. Widgets are only extracted from research agent responses.
+    """
+    team = _build_minto_team(system_prompt, chat_history, extra_tools, supabase_client, user_id)
+
+    result = team.run(user_prompt)
+
+    text = ""
+    if result and result.content:
+        text = str(result.content).strip()
+
+    # Widget extraction works on member RunOutputs surfaced by the team
+    widgets: list[dict] = []
+    try:
+        if result and hasattr(result, "member_responses") and result.member_responses:
+            for member_resp in result.member_responses:
+                if hasattr(member_resp, "tools") and member_resp.tools:
+                    widgets.extend(_extract_widgets(member_resp))
+    except Exception:
+        pass
+
+    return text, widgets
+
+
+def run_team_stream(
+    system_prompt: str,
+    user_prompt: str,
+    chat_history: list[dict] | None = None,
+    extra_tools: list | None = None,
+    supabase_client: Any = None,
+    user_id: str = "",
+) -> Iterator[dict]:
+    """Stream events from the Minto Team.
+
+    Yields dicts with same shape as run_research_agent_stream:
+      {"type": "token", "content": "..."}
+      {"type": "tool_started", "tool_name": "..."}
+      {"type": "tool_completed", "tool_name": "...", "widgets": [...]}
+      {"type": "done", "content": "...", "widgets": [...]}
+    """
+    team = _build_minto_team(system_prompt, chat_history, extra_tools, supabase_client, user_id)
+
+    stream = team.run(user_prompt, stream=True, stream_events=True)
+    full_content = ""
+    all_widgets: list[dict] = []
+
+    for chunk in stream:
+        event = getattr(chunk, "event", None)
+
+        # Final team content (routed member response)
+        if event == TeamRunEvent.run_content:
+            token = chunk.content or ""
+            if token:
+                full_content += token
+                yield {"type": "token", "content": token}
+
+        # Member tool call started — surface to caller for UI feedback
+        elif event in (TeamRunEvent.tool_call_started, RunEvent.tool_call_started):
+            tool_name = ""
+            if hasattr(chunk, "tool") and chunk.tool:
+                tool_name = chunk.tool.tool_name or ""
+            yield {"type": "tool_started", "tool_name": tool_name}
+
+        # Member tool call completed — extract widgets immediately
+        elif event in (TeamRunEvent.tool_call_completed, RunEvent.tool_call_completed):
+            tool_name = ""
+            tool_widgets: list[dict] = []
+            if hasattr(chunk, "tool") and chunk.tool:
+                tool_name = chunk.tool.tool_name or ""
+                mock = RunOutput()
+                mock.tools = [chunk.tool]
+                tool_widgets = _extract_widgets(mock)
+                all_widgets.extend(tool_widgets)
+            yield {
+                "type": "tool_completed",
+                "tool_name": tool_name,
+                "widgets": tool_widgets,
+            }
+
+        # Member intermediate content (agent streaming its response)
+        elif event == TeamRunEvent.run_intermediate_content:
+            token = chunk.content or ""
+            if token:
+                full_content += token
+                yield {"type": "token", "content": token}
+
+    yield {"type": "done", "content": full_content, "widgets": all_widgets}
+
+
 def run_research_agent(
     system_prompt: str,
     user_prompt: str,
     chat_history: list[dict] | None = None,
     extra_tools: list | None = None,
+    supabase_client: Any = None,
+    user_id: str = "",
 ) -> tuple[str, list[dict]]:
     """Run the Agno research agent and return (reply_text, widgets).
 
-    This is the main entry point, replacing generate_response_with_tools().
+    When supabase_client and user_id are provided, runs via the full Minto Team
+    (enabling alert routing). Otherwise falls back to the bare research agent.
     """
-    agent = _build_agent(system_prompt, chat_history, extra_tools=extra_tools)
+    if supabase_client and user_id:
+        return run_team(system_prompt, user_prompt, chat_history, extra_tools, supabase_client, user_id)
 
-    # Convert chat history to Agno message format and pass as additional_input
-    history_messages = []
-    for msg in (chat_history or []):
-        role = msg.get("role", "user")
-        content = msg.get("content", "")
-        if content:
-            history_messages.append({"role": role, "content": content})
-
-    if history_messages:
-        agent.additional_input = [
-            {"role": m["role"], "content": m["content"]}
-            for m in history_messages
-        ]
-
+    agent = _build_research_agent(system_prompt, chat_history, extra_tools=extra_tools)
+    _set_agent_history(agent, chat_history)
     result: RunOutput = agent.run(user_prompt)
 
     text = ""
@@ -370,29 +507,26 @@ def run_research_agent_stream(
     user_prompt: str,
     chat_history: list[dict] | None = None,
     extra_tools: list | None = None,
+    supabase_client: Any = None,
+    user_id: str = "",
 ) -> Iterator[dict]:
     """Run the Agno research agent in streaming mode.
+
+    When supabase_client and user_id are provided, streams via the full Minto Team.
+    Otherwise falls back to the bare research agent stream.
 
     Yields dicts with:
       {"type": "token", "content": "..."}
       {"type": "tool_started", "tool_name": "..."}
-      {"type": "tool_completed", "tool_name": "...", "tool_exec": ToolExecution}
+      {"type": "tool_completed", "tool_name": "...", "widgets": [...]}
       {"type": "done", "content": "...", "widgets": [...]}
     """
-    agent = _build_agent(system_prompt, chat_history, extra_tools=extra_tools)
+    if supabase_client and user_id:
+        yield from run_team_stream(system_prompt, user_prompt, chat_history, extra_tools, supabase_client, user_id)
+        return
 
-    history_messages = []
-    for msg in (chat_history or []):
-        role = msg.get("role", "user")
-        content = msg.get("content", "")
-        if content:
-            history_messages.append({"role": role, "content": content})
-
-    if history_messages:
-        agent.additional_input = [
-            {"role": m["role"], "content": m["content"]}
-            for m in history_messages
-        ]
+    agent = _build_research_agent(system_prompt, chat_history, extra_tools=extra_tools)
+    _set_agent_history(agent, chat_history)
 
     stream = agent.run(user_prompt, stream=True, stream_events=True)
     full_content = ""
@@ -416,7 +550,6 @@ def run_research_agent_stream(
             tool_widgets: list[dict] = []
             if hasattr(chunk, "tool") and chunk.tool:
                 tool_name = chunk.tool.tool_name or ""
-                # Extract widget immediately from this tool's result
                 mock = RunOutput()
                 mock.tools = [chunk.tool]
                 tool_widgets = _extract_widgets(mock)

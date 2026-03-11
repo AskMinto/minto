@@ -263,6 +263,13 @@ class Prompts:
     def agent_config(self) -> dict[str, Any]:
         return self._data["agent_config"]
 
+    # ── Raw data access ──────────────────────────────────
+
+    @property
+    def raw(self) -> dict[str, Any]:
+        """Direct access to the full parsed YAML for sections not covered by typed accessors."""
+        return self._data
+
     # ── Risk Agent ───────────────────────────────────────
 
     @property

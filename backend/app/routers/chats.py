@@ -277,7 +277,8 @@ def send_message(
 
     try:
         assistant_reply, widgets = run_research_agent(
-            system_prompt, prompt, chat_history=recent_history, extra_tools=extra_tools
+            system_prompt, prompt, chat_history=recent_history, extra_tools=extra_tools,
+            supabase_client=supabase, user_id=user.user_id,
         )
         if not assistant_reply:
             assistant_reply = ""
@@ -343,6 +344,8 @@ def send_message_stream(
                 prompt,
                 chat_history=recent_history,
                 extra_tools=extra_tools,
+                supabase_client=supabase,
+                user_id=user.user_id,
             ):
                 event_type = event.get("type", "")
 

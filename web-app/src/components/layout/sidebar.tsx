@@ -11,6 +11,7 @@ import {
   LayoutDashboard,
   FolderOpen,
   Search,
+  Bell,
   Settings,
   LogOut,
   TrendingUp,
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/holdings", icon: FolderOpen, label: "Holdings" },
   { href: "/search", icon: Search, label: "Search" },
+  { href: "/alerts", icon: Bell, label: "Alerts" },
 ];
 
 export function Sidebar() {
