@@ -1,4 +1,4 @@
--- 002_price_alerts.sql
+-- 004_price_alerts.sql
 -- Creates the price_alerts table for user-defined price notifications.
 
 CREATE TABLE public.price_alerts (
