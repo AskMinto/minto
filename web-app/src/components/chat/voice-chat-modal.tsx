@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { X, Mic, MicOff, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -268,8 +269,8 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
 
   const isActive = status === "listening" || status === "speaking" || status === "thinking";
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 backdrop-blur-xl animate-in fade-in duration-300">
+  const modal = (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/25 backdrop-blur-xl animate-in fade-in duration-300">
       {/* Backdrop click to close */}
       <div className="absolute inset-0" onClick={onClose} />
 
@@ -389,4 +390,6 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
       </div>
     </div>
   );
+
+  return createPortal(modal, document.body);
 }
