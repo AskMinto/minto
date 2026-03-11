@@ -9,11 +9,18 @@ interface Props {
   onClose: () => void;
 }
 
+interface TranscriptLine {
+  role: "user" | "agent";
+  text: string;
+}
+
 export function VoiceChatModal({ isOpen, onClose }: Props) {
   const [status, setStatus] = useState<
     "idle" | "connecting" | "connected" | "error" | "listening" | "speaking" | "thinking"
   >("idle");
-  const [transcript, setTranscript] = useState<string>("");
+  // Two-line rolling transcript: prev line (completed) + current line (live)
+  const [prevLine, setPrevLine] = useState<TranscriptLine | null>(null);
+  const [currentLine, setCurrentLine] = useState<TranscriptLine | null>(null);
   const [errorMessage, setErrorMessage] = useState<string>("");
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -47,14 +54,16 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
       audioElRef.current.srcObject = null;
     }
     setStatus("idle");
-    setTranscript("");
+    setPrevLine(null);
+    setCurrentLine(null);
     setErrorMessage("");
   };
 
   const startSession = async () => {
     try {
       setStatus("connecting");
-      setTranscript("");
+      setPrevLine(null);
+      setCurrentLine(null);
       setErrorMessage("");
 
       const supabase = createClient();
@@ -104,18 +113,35 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
           const event = JSON.parse(e.data);
           
           if (event.type === "response.output_audio_transcript.delta") {
-            setTranscript((prev) => prev + event.delta);
+            // Agent speaking — stream delta into current line
+            setCurrentLine((prev) =>
+              prev?.role === "agent"
+                ? { role: "agent", text: prev.text + event.delta }
+                : { role: "agent", text: event.delta }
+            );
             setStatus("speaking");
           } else if (event.type === "response.output_audio_transcript.done") {
-            // Model finished speaking
+            // Agent finished — promote current to prev, clear current
+            setCurrentLine((prev) => {
+              if (prev) setPrevLine(prev);
+              return null;
+            });
             setStatus("listening");
-            setTranscript("");
-          } else if (event.type === "conversation.item.input_audio_transcription.completed") {
-            // User finished speaking
-            setTranscript("");
           } else if (event.type === "input_audio_buffer.speech_started") {
+            // User started speaking — start a new user line
+            setCurrentLine((prev) => {
+              if (prev) setPrevLine(prev);
+              return { role: "user", text: "" };
+            });
             setStatus("listening");
-            setTranscript("");
+          } else if (event.type === "conversation.item.input_audio_transcription.completed") {
+            // User finished — finalise their line text
+            const finalText = event.transcript ?? "";
+            setCurrentLine((prev) => {
+              const updated: TranscriptLine = { role: "user", text: finalText };
+              if (prev) setPrevLine(prev);
+              return updated;
+            });
           } else if (event.type === "response.done") {
             // Canonical handler for tool calls — inspect all output items
             const outputs: any[] = event.response?.output ?? [];
@@ -124,7 +150,7 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
             if (functionCalls.length === 0) return;
 
             setStatus("thinking");
-            setTranscript("");
+            setCurrentLine(null);
 
             (async () => {
               // Execute all tool calls in parallel, then send a single response.create
@@ -247,129 +273,119 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
       {/* Backdrop click to close */}
       <div className="absolute inset-0" onClick={onClose} />
 
-      <div className="glass-elevated relative z-10 rounded-[2.5rem] w-full max-w-lg mx-4 flex flex-col overflow-hidden shadow-2xl border border-white/40"
-        style={{ minHeight: 520 }}
-      >
-        {/* Top bar */}
-        <div className="flex items-center justify-between px-7 pt-7 pb-2">
-          <div className="flex items-center gap-2">
-            <Mic className="w-4 h-4 text-minto-accent" />
-            <span className="text-minto-text text-sm font-medium tracking-wide">Voice Chat</span>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/50 hover:bg-white/80 border border-white/60 flex items-center justify-center text-minto-text-muted hover:text-minto-text transition-all"
-          >
-            <X size={15} />
-          </button>
+      {/* Floating card — compact, centered, not anchored to any edge */}
+      <div className="glass-elevated relative z-10 rounded-[2rem] w-[360px] flex flex-col items-center shadow-2xl border border-white/40 overflow-hidden">
+
+        {/* Close button — top right */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/50 hover:bg-white/80 border border-white/60 flex items-center justify-center text-minto-text-muted hover:text-minto-text transition-all"
+        >
+          <X size={15} />
+        </button>
+
+        {/* Label */}
+        <div className="flex items-center gap-2 mt-6 mb-0">
+          <Mic className="w-3.5 h-3.5 text-minto-accent" />
+          <span className="text-minto-text-muted text-xs font-medium tracking-wider uppercase">Voice Chat</span>
         </div>
 
-        {/* Main body — orb + rings + status */}
-        <div className="flex-1 flex flex-col items-center justify-center px-8 py-10 relative overflow-hidden">
+        {/* Orb area with rings */}
+        <div className="relative flex items-center justify-center w-full" style={{ height: 260 }}>
 
-          {/* Layered ambient rings — always render, opacity driven by state */}
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            {/* Ring 1 */}
-            <div className={`absolute rounded-full border transition-all duration-700 ${
-              isActive
-                ? `border-minto-accent/25 ${status === "speaking" ? "w-52 h-52 animate-ping duration-[900ms]" : status === "thinking" ? "w-52 h-52 animate-ping duration-[1800ms]" : "w-52 h-52 animate-ping duration-[2800ms]"}`
-                : "w-40 h-40 border-minto-accent/5 opacity-0"
-            }`} />
-            {/* Ring 2 */}
-            <div className={`absolute rounded-full border transition-all duration-700 ${
-              isActive
-                ? `border-minto-accent/15 ${status === "speaking" ? "w-72 h-72 animate-ping duration-[900ms] delay-100" : status === "thinking" ? "w-72 h-72 animate-ping duration-[1800ms] delay-150" : "w-72 h-72 animate-ping duration-[2800ms] delay-200"}`
-                : "w-56 h-56 border-minto-accent/5 opacity-0"
-            }`} />
-            {/* Ring 3 — outermost, very faint */}
-            <div className={`absolute rounded-full border transition-all duration-700 ${
-              isActive
-                ? `border-minto-accent/8 ${status === "speaking" ? "w-96 h-96 animate-ping duration-[900ms] delay-200" : status === "thinking" ? "w-96 h-96 animate-ping duration-[1800ms] delay-300" : "w-96 h-96 animate-ping duration-[2800ms] delay-500"}`
-                : "opacity-0"
-            }`} />
-          </div>
+          {/* Ambient rings */}
+          {isActive && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className={`absolute rounded-full border border-minto-accent/20 ${
+                status === "speaking" ? "w-44 h-44 animate-ping" : status === "thinking" ? "w-44 h-44 animate-ping" : "w-44 h-44 animate-ping"
+              }`} style={{ animationDuration: status === "speaking" ? "900ms" : status === "thinking" ? "1800ms" : "2800ms" }} />
+              <div className={`absolute rounded-full border border-minto-accent/12 ${
+                status === "speaking" ? "w-60 h-60 animate-ping" : "w-60 h-60 animate-ping"
+              }`} style={{ animationDuration: status === "speaking" ? "900ms" : status === "thinking" ? "1800ms" : "2800ms", animationDelay: "150ms" }} />
+              <div className="absolute rounded-full border border-minto-accent/6 w-72 h-72 animate-ping"
+                style={{ animationDuration: status === "speaking" ? "900ms" : status === "thinking" ? "1800ms" : "2800ms", animationDelay: "300ms" }} />
+            </div>
+          )}
 
           {/* Central orb */}
-          <div className="z-10 flex flex-col items-center gap-8 w-full">
-            {status === "connecting" ? (
-              <>
-                <div className="w-32 h-32 rounded-full bg-white/40 border border-white/60 flex items-center justify-center shadow-lg">
-                  <Loader2 className="w-12 h-12 text-minto-accent animate-spin" />
-                </div>
-                <p className="text-minto-text-secondary text-base">Connecting to Minto...</p>
-              </>
-            ) : status === "error" ? (
-              <>
-                <div className="w-32 h-32 rounded-full bg-red-50/60 border border-red-200/50 flex items-center justify-center shadow-lg">
-                  <MicOff className="w-12 h-12 text-minto-negative" />
-                </div>
-                <div className="text-center space-y-3">
-                  <p className="text-minto-negative text-sm max-w-xs">{errorMessage}</p>
-                  <button
-                    onClick={startSession}
-                    className="px-5 py-2 bg-minto-negative/10 hover:bg-minto-negative/20 rounded-full text-minto-negative text-sm transition-colors"
-                  >
-                    Try Again
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                {/* The main mic orb */}
-                <div
-                  className={`w-32 h-32 rounded-full flex items-center justify-center transition-all duration-500 ${
-                    status === "speaking"
-                      ? "bg-minto-accent text-white scale-110 shadow-[0_0_60px_rgba(75,172,130,0.45)]"
-                      : status === "thinking"
-                      ? "bg-minto-accent/20 text-minto-accent scale-105 border-2 border-minto-accent/40 shadow-[0_0_40px_rgba(75,172,130,0.2)]"
-                      : "bg-white/50 text-minto-text-muted border border-white/70 shadow-lg"
-                  }`}
-                >
-                  <Mic className={`transition-all duration-500 ${status === "speaking" ? "w-14 h-14" : "w-12 h-12"}`} />
-                </div>
-
-                {/* Status label + transcript */}
-                <div className="text-center w-full space-y-2 min-h-[64px] flex flex-col items-center justify-center">
-                  {status === "thinking" && (
-                    <>
-                      <p className="text-minto-accent font-medium text-base animate-pulse">Researching...</p>
-                      <p className="text-minto-text-muted text-xs">Looking that up for you</p>
-                    </>
-                  )}
-                  {status === "speaking" && transcript && (
-                    <p className="text-minto-text text-base font-medium leading-snug max-w-xs">
-                      {transcript}
-                    </p>
-                  )}
-                  {status === "speaking" && !transcript && (
-                    <p className="text-minto-accent font-medium text-base animate-pulse">Speaking...</p>
-                  )}
-                  {status === "listening" && !transcript && (
-                    <p className="text-minto-text-muted text-base animate-pulse">Listening...</p>
-                  )}
-                  {status === "listening" && transcript && (
-                    <p className="text-minto-text text-base font-medium leading-snug max-w-xs">
-                      {transcript}
-                    </p>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
+          {status === "connecting" ? (
+            <div className="w-28 h-28 rounded-full bg-white/40 border border-white/60 flex items-center justify-center shadow-lg">
+              <Loader2 className="w-10 h-10 text-minto-accent animate-spin" />
+            </div>
+          ) : status === "error" ? (
+            <div className="w-28 h-28 rounded-full bg-red-50/60 border border-red-200/50 flex items-center justify-center shadow-lg">
+              <MicOff className="w-10 h-10 text-minto-negative" />
+            </div>
+          ) : (
+            <div className={`w-28 h-28 rounded-full flex items-center justify-center transition-all duration-500 ${
+              status === "speaking"
+                ? "bg-minto-accent text-white scale-110 shadow-[0_0_60px_rgba(75,172,130,0.5)]"
+                : status === "thinking"
+                ? "bg-minto-accent/20 text-minto-accent scale-105 border-2 border-minto-accent/40 shadow-[0_0_40px_rgba(75,172,130,0.25)]"
+                : "bg-white/50 text-minto-text-muted border border-white/70 shadow-lg"
+            }`}>
+              <Mic className={`transition-all duration-500 ${status === "speaking" ? "w-12 h-12" : "w-10 h-10"}`} />
+            </div>
+          )}
         </div>
 
-        {/* Bottom — end call button */}
-        {(status === "listening" || status === "speaking" || status === "thinking") && (
-          <div className="flex justify-center pb-8 pt-2">
+        {/* Two-line rolling transcript */}
+        <div className="w-full px-6 pb-1" style={{ minHeight: 48 }}>
+          {status === "connecting" ? (
+            <p className="text-center text-minto-text-secondary text-sm">Connecting to Minto...</p>
+          ) : status === "error" ? (
+            <p className="text-center text-minto-negative text-sm">{errorMessage}</p>
+          ) : status === "thinking" ? (
+            <>
+              <p className="text-center text-minto-text-muted text-sm opacity-50 truncate">&nbsp;</p>
+              <p className="text-center text-minto-accent text-sm font-medium animate-pulse">Researching...</p>
+            </>
+          ) : (
+            <>
+              {/* Prev line — dimmed, role-coloured */}
+              <p className={`text-center text-sm truncate transition-all duration-300 ${
+                prevLine?.role === "user"
+                  ? "text-minto-accent/50"
+                  : "text-minto-text-muted/50"
+              }`}>
+                {prevLine?.text || "\u00A0"}
+              </p>
+              {/* Current live line */}
+              <p className={`text-center text-sm font-medium truncate transition-all duration-150 ${
+                currentLine?.role === "user"
+                  ? "text-minto-accent"
+                  : currentLine?.role === "agent"
+                  ? "text-minto-text"
+                  : "text-minto-text-muted animate-pulse"
+              }`}>
+                {currentLine?.text ||
+                  (status === "listening" ? "Listening..." : status === "speaking" ? "Speaking..." : "\u00A0")}
+              </p>
+            </>
+          )}
+        </div>
+
+        {/* End call / retry button */}
+        <div className="flex justify-center py-5">
+          {status === "error" ? (
+            <button
+              onClick={startSession}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-minto-negative/10 hover:bg-minto-negative/20 border border-minto-negative/20 text-minto-negative text-sm font-medium transition-all"
+            >
+              Try Again
+            </button>
+          ) : isActive ? (
             <button
               onClick={onClose}
-              className="flex items-center gap-2 px-6 py-3 rounded-full bg-minto-negative/10 hover:bg-minto-negative/20 border border-minto-negative/20 text-minto-negative text-sm font-medium transition-all hover:scale-105"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-minto-negative/10 hover:bg-minto-negative/20 border border-minto-negative/20 text-minto-negative text-sm font-medium transition-all hover:scale-105"
             >
-              <MicOff size={16} />
+              <MicOff size={15} />
               End call
             </button>
-          </div>
-        )}
+          ) : (
+            <div className="h-10" />
+          )}
+        </div>
       </div>
     </div>
   );
