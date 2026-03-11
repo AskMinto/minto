@@ -8,6 +8,7 @@ import { WidgetAlertSetup } from "./widget-alert-setup";
 import { Spinner } from "@/components/ui/spinner";
 
 interface ChatMessage {
+  id?: string;
   role: "user" | "assistant";
   content: string;
   metadata?: { widgets?: Record<string, unknown>[] };
@@ -130,7 +131,7 @@ export function MessageList({ messages, sending, onLoadOlder, loadingMore, hasMo
                       <WidgetNews data={{ items: allNews as never[] }} />
                     )}
                     {alertSetupData && (
-                      <WidgetAlertSetup data={alertSetupData as never} />
+                      <WidgetAlertSetup data={alertSetupData as never} messageId={msg.id} />
                     )}
                   </div>
                 );

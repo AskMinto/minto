@@ -5,6 +5,7 @@ import { apiGet } from "@/lib/api";
 import { apiStream, SSEEvent } from "@/lib/api-stream";
 
 interface ChatMessage {
+  id?: string;
   role: "user" | "assistant";
   content: string;
   created_at?: string;

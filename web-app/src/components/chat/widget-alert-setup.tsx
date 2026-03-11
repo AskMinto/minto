@@ -29,7 +29,7 @@ const ALERT_TYPES = [
   { value: "pct_change_down",label: "Falls by",          suffix: "%",  isPct: true  },
 ];
 
-export function WidgetAlertSetup({ data }: { data: AlertSetupData }) {
+export function WidgetAlertSetup({ data, messageId }: { data: AlertSetupData; messageId?: string }) {
   // Instrument state
   const [displayName, setDisplayName] = useState(data.display_name || "");
   const [symbol, setSymbol]           = useState(data.symbol || "");
@@ -50,7 +50,11 @@ export function WidgetAlertSetup({ data }: { data: AlertSetupData }) {
 
   // Submission
   const [submitting, setSubmitting]   = useState(false);
-  const [done, setDone]               = useState(false);
+  const lsKey = messageId ? `alert_widget_done_${messageId}` : null;
+  const [done, setDone]               = useState(() => {
+    if (!lsKey) return false;
+    try { return localStorage.getItem(lsKey) === "1"; } catch { return false; }
+  });
   const [error, setError]             = useState("");
 
   const instrumentSelected = !!(displayName && (symbol || schemeCode));
@@ -139,6 +143,7 @@ export function WidgetAlertSetup({ data }: { data: AlertSetupData }) {
         payload.exchange = exchange;
       }
       await apiPost("/alerts", payload);
+      if (lsKey) { try { localStorage.setItem(lsKey, "1"); } catch {} }
       setDone(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to set alert.");
