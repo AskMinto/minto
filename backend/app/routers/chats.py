@@ -429,7 +429,14 @@ async def get_voice_token(user: UserContext = Depends(get_user_context)):
     agent_instructions = "\n".join(prompts.agent_instructions)
     context_prompt = _build_user_prompt("", memory, portfolio, financial_profile)
 
-    full_instructions = f"{system_prompt}\n\n{agent_instructions}\n\n{context_prompt}"
+    voice_hint = (
+        "\n\nVOICE BEHAVIOR: You are in a voice conversation. "
+        "Keep responses concise and conversational — speak naturally as if talking to a person. "
+        "When you need to look something up using a tool, briefly say so first "
+        "(e.g. 'Let me check that for you') before the tool call completes. "
+        "Avoid reading out long lists, markdown, or bullet points — convert them to natural speech."
+    )
+    full_instructions = f"{system_prompt}\n\n{agent_instructions}\n\n{context_prompt}{voice_hint}"
 
     try:
         async with httpx.AsyncClient() as client:
@@ -443,6 +450,9 @@ async def get_voice_token(user: UserContext = Depends(get_user_context)):
                     "model": "gpt-4o-realtime-preview-2024-12-17",
                     "voice": "verse",
                     "instructions": full_instructions,
+                    "input_audio_transcription": {
+                        "model": "whisper-1",
+                    },
                     "tools": [
                         {
                             "type": "function",

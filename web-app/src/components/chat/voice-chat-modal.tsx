@@ -11,7 +11,7 @@ interface Props {
 
 export function VoiceChatModal({ isOpen, onClose }: Props) {
   const [status, setStatus] = useState<
-    "idle" | "connecting" | "connected" | "error" | "listening" | "speaking"
+    "idle" | "connecting" | "connected" | "error" | "listening" | "speaking" | "thinking"
   >("idle");
   const [transcript, setTranscript] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -103,50 +103,69 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
         try {
           const event = JSON.parse(e.data);
           
-          if (event.type === "response.audio_transcript.delta") {
+          if (event.type === "response.output_audio_transcript.delta") {
             setTranscript((prev) => prev + event.delta);
             setStatus("speaking");
-          } else if (event.type === "response.audio_transcript.done") {
-             // Response completed
-             setStatus("listening");
+          } else if (event.type === "response.output_audio_transcript.done") {
+            // Model finished speaking
+            setStatus("listening");
+            setTranscript("");
           } else if (event.type === "conversation.item.input_audio_transcription.completed") {
             // User finished speaking
             setTranscript("");
           } else if (event.type === "input_audio_buffer.speech_started") {
-             setStatus("listening");
-             setTranscript("");
-          } else if (event.type === "response.function_call_arguments.done") {
-             const callId = event.call_id;
-             const name = event.name;
-             const args = JSON.parse(event.arguments);
-             
-             (async () => {
-                 let result = "";
-                 try {
-                     const res = await fetch(`/api/proxy/chat/voice/tool`, {
-                         method: "POST",
-                         headers: {
-                             "Content-Type": "application/json",
-                             "Authorization": `Bearer ${session.access_token}`
-                         },
-                         body: JSON.stringify({ name, arguments: args })
-                     });
-                     const data = await res.json();
-                     result = JSON.stringify(data);
-                 } catch (err: any) {
-                     result = JSON.stringify({ error: err.message });
-                 }
-                 
-                 dc.send(JSON.stringify({
-                     type: "conversation.item.create",
-                     item: {
-                         type: "function_call_output",
-                         call_id: callId,
-                         output: result
-                     }
-                 }));
-                 dc.send(JSON.stringify({ type: "response.create" }));
-             })();
+            setStatus("listening");
+            setTranscript("");
+          } else if (event.type === "response.done") {
+            // Canonical handler for tool calls — inspect all output items
+            const outputs: any[] = event.response?.output ?? [];
+            const functionCalls = outputs.filter((o: any) => o.type === "function_call");
+
+            if (functionCalls.length === 0) return;
+
+            setStatus("thinking");
+            setTranscript("");
+
+            (async () => {
+              // Execute all tool calls in parallel, then send a single response.create
+              await Promise.all(
+                functionCalls.map(async (fc: any) => {
+                  const callId = fc.call_id;
+                  const name = fc.name;
+                  let args: any = {};
+                  try { args = JSON.parse(fc.arguments); } catch {}
+
+                  let result = "";
+                  try {
+                    const res = await fetch(`/api/proxy/chat/voice/tool`, {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${session.access_token}`,
+                      },
+                      body: JSON.stringify({ name, arguments: args }),
+                    });
+                    const data = await res.json();
+                    result = JSON.stringify(data);
+                  } catch (err: any) {
+                    result = JSON.stringify({ error: err.message });
+                  }
+
+                  dc.send(JSON.stringify({
+                    type: "conversation.item.create",
+                    item: {
+                      type: "function_call_output",
+                      call_id: callId,
+                      output: result,
+                    },
+                  }));
+                })
+              );
+
+              // One response.create after all tool outputs have been sent
+              dc.send(JSON.stringify({ type: "response.create" }));
+              setStatus("listening");
+            })();
           }
         } catch (err) {
           console.error("Data channel parse error:", err);
@@ -183,23 +202,33 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
       setStatus("listening");
 
       dc.onopen = () => {
-         if (tokenData.recent_history && Array.isArray(tokenData.recent_history)) {
-             for (const msg of tokenData.recent_history) {
-                 if (!msg.content) continue;
-                 const role = msg.role === "user" ? "user" : "assistant";
-                 dc.send(JSON.stringify({
-                     type: "conversation.item.create",
-                     item: {
-                         type: "message",
-                         role: role,
-                         content: [{
-                             type: role === "user" ? "input_text" : "text",
-                             text: msg.content
-                         }]
-                     }
-                 }));
-             }
-         }
+        // Re-confirm VAD and enable input transcription so user speech events fire
+        dc.send(JSON.stringify({
+          type: "session.update",
+          session: {
+            input_audio_transcription: { model: "whisper-1" },
+            turn_detection: { type: "server_vad" },
+          },
+        }));
+
+        // Inject recent chat history as context
+        if (tokenData.recent_history && Array.isArray(tokenData.recent_history)) {
+          for (const msg of tokenData.recent_history) {
+            if (!msg.content) continue;
+            const role = msg.role === "user" ? "user" : "assistant";
+            dc.send(JSON.stringify({
+              type: "conversation.item.create",
+              item: {
+                type: "message",
+                role: role,
+                content: [{
+                  type: role === "user" ? "input_text" : "text",
+                  text: msg.content,
+                }],
+              },
+            }));
+          }
+        }
       };
 
     } catch (err: any) {
@@ -232,10 +261,10 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
         <div className="flex-1 flex flex-col items-center justify-center min-h-[300px] p-8 relative overflow-hidden">
           
           {/* Animated rings for active state */}
-          {(status === "listening" || status === "speaking") && (
+          {(status === "listening" || status === "speaking" || status === "thinking") && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className={`w-32 h-32 rounded-full border-2 border-minto-accent/30 animate-ping absolute ${status === "speaking" ? 'duration-1000' : 'duration-3000'}`} />
-              <div className={`w-48 h-48 rounded-full border-2 border-minto-accent/10 animate-ping absolute ${status === "speaking" ? 'duration-1000 delay-150' : 'duration-3000 delay-300'}`} />
+              <div className={`w-32 h-32 rounded-full border-2 border-minto-accent/30 animate-ping absolute ${status === "speaking" ? 'duration-1000' : status === "thinking" ? 'duration-2000' : 'duration-3000'}`} />
+              <div className={`w-48 h-48 rounded-full border-2 border-minto-accent/10 animate-ping absolute ${status === "speaking" ? 'duration-1000 delay-150' : status === "thinking" ? 'duration-2000 delay-200' : 'duration-3000 delay-300'}`} />
             </div>
           )}
 
@@ -261,7 +290,9 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
                 <div 
                   className={`w-24 h-24 rounded-full flex items-center justify-center transition-all duration-300 ${
                     status === "speaking" 
-                      ? "bg-minto-accent text-white scale-110 shadow-[0_0_30px_rgba(75,172,130,0.4)]" 
+                      ? "bg-minto-accent text-white scale-110 shadow-[0_0_30px_rgba(75,172,130,0.4)]"
+                      : status === "thinking"
+                      ? "bg-minto-accent/30 text-minto-accent scale-105 border border-minto-accent/40 shadow-sm"
                       : "bg-white/40 text-minto-text-muted scale-100 border border-white/50 shadow-sm"
                   }`}
                 >
@@ -269,10 +300,13 @@ export function VoiceChatModal({ isOpen, onClose }: Props) {
                 </div>
                 
                 <div className="mt-8 text-center h-20 w-full flex items-center justify-center">
+                  {status === "thinking" && (
+                    <p className="text-minto-text-secondary text-lg animate-pulse">Researching...</p>
+                  )}
                   {status === "listening" && !transcript && (
                     <p className="text-minto-text-muted text-lg animate-pulse">Listening...</p>
                   )}
-                  {transcript && (
+                  {transcript && status !== "thinking" && (
                     <p className="text-minto-text text-lg font-medium tracking-wide">
                       {transcript}
                     </p>
