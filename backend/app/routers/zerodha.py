@@ -155,7 +155,7 @@ def callback(payload: CallbackPayload, user: UserContext = Depends(get_user_cont
     # Trigger risk analysis in background (non-blocking)
     def _bg_risk_analysis(token: str, user_id: str):
         try:
-            from ..services.risk_agent import run_risk_analysis
+            from ..agents.risk_agent import run_risk_analysis
             from ..services.portfolio import compute_portfolio
             sb = get_supabase_client(token)
             h = sb.table("holdings").select("*").eq("user_id", user_id).execute().data or []

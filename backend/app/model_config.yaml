@@ -1,0 +1,49 @@
+# ─────────────────────────────────────────────────────────
+# Minto — Model Configuration
+# ─────────────────────────────────────────────────────────
+# Single source of truth for all model identifiers and
+# runtime config (temperature, limits, timeouts, etc.).
+#
+# Change a model name here and it propagates everywhere.
+# ─────────────────────────────────────────────────────────
+
+# ── Shared defaults ──────────────────────────────────────
+defaults:
+  timezone: "Asia/Kolkata"
+
+# ── Research Agent ───────────────────────────────────────
+# Main chat agent — Gemini + YFinance / DuckDuckGo / Newspaper4k tools
+research_agent:
+  model: "gemini-3-flash-preview"
+  temperature: 0.3
+  tool_call_limit: 12
+  max_history_messages: 10
+  max_holdings_in_prompt: 10
+  max_assistant_message_length: 500
+
+# ── Alert Agent ──────────────────────────────────────────
+# Specialist agent — creates / lists / cancels price alerts
+alert_agent:
+  model: "gemini-3-flash-preview"
+  temperature: 0.1
+
+# ── Team Router ──────────────────────────────────────────
+# Route-mode Agno Team leader — classifies and routes messages
+team_router:
+  model: "gemini-3-flash-preview"
+  temperature: 0.1
+
+# ── Risk Agent ───────────────────────────────────────────
+# Portfolio concentration and diversification risk analyser
+risk_agent:
+  model: "gemini-3-flash-preview"
+  temperature: 0.2
+  tool_call_limit: 0
+
+# ── Voice Agent ──────────────────────────────────────────
+# OpenAI Realtime API — WebRTC voice session
+voice_agent:
+  model: "gpt-realtime-1.5"
+  voice: "verse"
+  input_audio_transcription_model: "whisper-1"
+  turn_detection: "server_vad"

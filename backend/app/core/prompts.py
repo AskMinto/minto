@@ -1,14 +1,16 @@
 """
-Prompt loader — reads all prompts and config from prompts.yaml.
+Prompt loader — reads all prompts from prompts.yaml.
 
 Usage:
     from app.core.prompts import prompts
 
     prompts.system_prompt_base          # str
     prompts.agent_instructions          # list[str]
-    prompts.agent_config["model"]       # str
     prompts.guardrail_patterns          # list[str]
-    prompts.format_user_prompt(...)     # assembled user prompt
+    prompts.build_user_prompt(...)      # assembled user prompt
+
+Model config (model IDs, temperatures, limits) lives in model_config.yaml.
+See app.core.model_config for those accessors.
 """
 
 from __future__ import annotations
@@ -85,7 +87,8 @@ class Prompts:
             f"P&L: {totals.get('pnl_pct', 0):.1f}%"
         )
 
-        max_holdings = self.agent_config.get("max_holdings_in_prompt", 10)
+        from .model_config import model_config
+        max_holdings = model_config.research_agent.get("max_holdings_in_prompt", 10)
         holdings_lines = []
         for h in top_holdings[:max_holdings]:
             scheme_code = h.get("scheme_code")
@@ -257,24 +260,7 @@ class Prompts:
     def disclaimer_strip_patterns(self) -> list[str]:
         return self._data["guardrails"]["disclaimer_strip_patterns"]
 
-    # ── Agent Config ─────────────────────────────────────
-
-    @property
-    def agent_config(self) -> dict[str, Any]:
-        return self._data["agent_config"]
-
-    # ── Raw data access ──────────────────────────────────
-
-    @property
-    def raw(self) -> dict[str, Any]:
-        """Direct access to the full parsed YAML for sections not covered by typed accessors."""
-        return self._data
-
     # ── Risk Agent ───────────────────────────────────────
-
-    @property
-    def risk_agent_config(self) -> dict[str, Any]:
-        return self._data["risk_agent"]["config"]
 
     @property
     def risk_agent_description(self) -> str:
@@ -283,6 +269,28 @@ class Prompts:
     @property
     def risk_agent_instructions(self) -> list[str]:
         return self._data["risk_agent"]["instructions"]
+
+    # ── Voice Agent ──────────────────────────────────────
+
+    @property
+    def voice_agent_hint(self) -> str:
+        return self._data["voice_agent"]["hint"].strip()
+
+    # ── Alert Agent ──────────────────────────────────────
+
+    @property
+    def alert_agent_role(self) -> str:
+        return self._data["alert_agent"].get("role", "Manage price alerts")
+
+    @property
+    def alert_agent_instructions(self) -> list[str]:
+        return self._data["alert_agent"].get("instructions", [])
+
+    # ── Team Router ──────────────────────────────────────
+
+    @property
+    def team_router_instructions(self) -> list[str]:
+        return self._data["team_router"].get("instructions", [])
 
 
 prompts = Prompts()

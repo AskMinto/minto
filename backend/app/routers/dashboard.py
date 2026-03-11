@@ -78,7 +78,7 @@ def analyze_risk(user: UserContext = Depends(get_user_context)):
     financial_profile = fp_result.data[0] if fp_result.data else None
 
     # 4. Run risk analysis
-    from ..services.risk_agent import run_risk_analysis
+    from ..agents.risk_agent import run_risk_analysis
     analysis = run_risk_analysis(portfolio, financial_profile)
 
     # 5. Upsert into risk_analyses table

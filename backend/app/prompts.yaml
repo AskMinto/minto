@@ -148,26 +148,10 @@ guardrails:
     - "Minto provides informational insights, not investment advice."
     - "Consider consulting a SEBI-registered advisor before making decisions."
 
-# ── Agent Config ────────────────────────────────────────
-# Model and tool configuration for the Agno agent.
-
-agent_config:
-  model: "gemini-3-flash-preview"
-  temperature: 0.3
-  tool_call_limit: 12
-  timezone: "Asia/Kolkata"
-  max_history_messages: 10
-  max_holdings_in_prompt: 10
-  max_assistant_message_length: 500
-
 # ── Alert Agent ─────────────────────────────────────────
 # Prompt and config for the alert management specialist agent.
 
 alert_agent:
-  config:
-    model: "gemini-3-flash-preview"
-    temperature: 0.1
-
   role: "Manage price alerts for Indian stocks and mutual funds"
 
   instructions:
@@ -190,10 +174,6 @@ alert_agent:
 # Instructions for the Agno Team leader in route mode.
 
 team_router:
-  config:
-    model: "gemini-3-flash-preview"
-    temperature: 0.1
-
   instructions:
     - "You are the Minto router. Your ONLY job is to decide which specialist to route to."
     - "Route to 'Alert Agent' when the user wants to:"
@@ -215,12 +195,6 @@ team_router:
 # Prompt and config for the portfolio risk analysis agent.
 
 risk_agent:
-  config:
-    model: "gemini-3-flash-preview"
-    temperature: 0.2
-    tool_call_limit: 0
-    timezone: "Asia/Kolkata"
-
   description: "Portfolio risk analyst for Indian equity and mutual fund markets."
 
   instructions:
@@ -405,3 +379,16 @@ risk_agent:
     - "- If a holding's type cannot be inferred, classify as UNKNOWN and flag green."
     - "- Do not repeat the same risk in multiple flags. Consolidate overlapping observations."
     - "- The summary must be written last and reflect the actual flags generated, not a generic statement."
+
+# ── Voice Agent ──────────────────────────────────────────
+# Instructions injected into the OpenAI Realtime API session.
+# These are appended to the standard system_prompt + agent_instructions,
+# giving voice-specific behavioral guidance on top of the base identity.
+
+voice_agent:
+  hint: |
+    VOICE BEHAVIOR: You are in a voice conversation.
+    Keep responses concise and conversational — speak naturally as if talking to a person.
+    When you need to look something up using a tool, briefly say so first
+    (e.g. 'Let me check that for you') before the tool call completes.
+    Avoid reading out long lists, markdown, or bullet points — convert them to natural speech.

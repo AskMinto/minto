@@ -15,161 +15,19 @@ from agno.tools.duckduckgo import DuckDuckGoTools
 
 from ..core.config import GEMINI_API_KEY
 from ..core.prompts import prompts
-from .mfapi_service import get_latest_nav as mf_get_nav, search_schemes
-from .yfinance_service import search as yf_search
-from .financial_profile import compute_metrics, ALL_UPDATABLE
+from ..core.model_config import model_config
+from ..agent_tools.research_tools import (
+    get_mf_nav,
+    get_market_overview,
+    search_instrument,
+    make_profile_update_tool,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class AgentNotConfigured(Exception):
     pass
-
-
-def _get_mf_nav(scheme_code: int) -> str:
-    """Get the latest NAV for a mutual fund scheme by its MFAPI scheme code.
-
-    Args:
-        scheme_code: The MFAPI scheme code (integer).
-
-    Returns:
-        JSON string with scheme_name, scheme_code, nav, fund_house, date.
-    """
-    result = mf_get_nav(scheme_code)
-    return json.dumps(result) if result else json.dumps({"error": "Scheme not found"})
-
-
-def _get_market_overview() -> str:
-    """Get current Indian market overview including Nifty 50, Sensex, and Bank Nifty indices.
-
-    Returns:
-        JSON string with current index levels and day changes.
-    """
-    import yfinance as yf
-    indices = {
-        "^NSEI": "Nifty 50",
-        "^BSESN": "Sensex",
-        "^NSEBANK": "Bank Nifty",
-    }
-    results = []
-    for symbol, name in indices.items():
-        try:
-            ticker = yf.Ticker(symbol)
-            hist = ticker.history(period="2d", interval="1d")
-            if hist is not None and not hist.empty:
-                close = float(hist["Close"].iloc[-1])
-                prev = float(hist["Close"].iloc[-2]) if len(hist) > 1 else None
-                change = close - prev if prev else None
-                change_pct = (change / prev * 100) if prev and prev != 0 else None
-                results.append({
-                    "name": name,
-                    "symbol": symbol,
-                    "value": round(close, 2),
-                    "change": round(change, 2) if change else None,
-                    "change_pct": round(change_pct, 2) if change_pct else None,
-                })
-        except Exception:
-            continue
-    return json.dumps(results) if results else json.dumps({"error": "Could not fetch market data"})
-
-
-def _search_instrument(query: str) -> str:
-    """Search for stocks or mutual fund schemes by name, symbol, or ISIN.
-
-    Args:
-        query: Search query — can be a company name, stock symbol, or scheme name.
-
-    Returns:
-        JSON string with matching equities and mutual fund schemes.
-    """
-    yf_data = yf_search(query)
-    equity_results = [
-        {"symbol": q.get("symbol"), "name": q.get("name"), "exchange": q.get("exchange"), "type": "EQUITY"}
-        for q in yf_data.get("quotes", [])[:6]
-    ]
-    mf_results = [
-        {"scheme_code": m.get("scheme_code"), "name": m.get("scheme_name"), "type": "MUTUAL_FUND"}
-        for m in search_schemes(query)[:6]
-    ]
-    return json.dumps(equity_results + mf_results)
-
-
-def _make_profile_update_tool(supabase_client, user_id: str):
-    """Create a per-request tool for updating the user's financial profile."""
-
-    def _update_financial_profile(updates: str) -> str:
-        """Update the user's financial profile / balance sheet.
-
-        Args:
-            updates: JSON string of field:value pairs to update.
-                Valid fields include: grossSalary, housing, homeLoanEMI, homeLoanOut,
-                equityMF, shares, fd, cashBank, homeValue, carValue, goldPhysical,
-                hasLifeInsurance, lifeInsuranceCover, hasHealthInsurance, healthInsuranceCover,
-                entertainment, lifestyle, subscriptions, age, dependents, earningMembers,
-                and many more. Values should be numbers for financial fields.
-                For goals, pass the full goals array.
-
-        Returns:
-            Confirmation message with updated metrics summary.
-        """
-        try:
-            import json as _json
-            field_updates = _json.loads(updates)
-        except (TypeError, _json.JSONDecodeError):
-            return "Error: updates must be a valid JSON string of field:value pairs."
-
-        # Fetch current profile
-        result = (
-            supabase_client.table("financial_profiles")
-            .select("responses,metrics")
-            .eq("user_id", user_id)
-            .limit(1)
-            .execute()
-        )
-        if not result.data:
-            return "Error: No financial profile found. The user needs to complete the financial profile questionnaire first."
-
-        current = result.data[0]
-        responses = current.get("responses", {})
-
-        # Apply updates — validate field names
-        updated_fields = []
-        for key, value in field_updates.items():
-            if key == "goals":
-                responses["goals"] = value
-                updated_fields.append("goals")
-            elif key in ALL_UPDATABLE:
-                responses[key] = value
-                updated_fields.append(key)
-            else:
-                return f"Error: '{key}' is not a valid field. Valid fields: {', '.join(sorted(ALL_UPDATABLE))}"
-
-        if not updated_fields:
-            return "No valid fields to update."
-
-        # Recompute metrics
-        new_metrics = compute_metrics(responses)
-
-        # Save back
-        from datetime import datetime, timezone
-        supabase_client.table("financial_profiles").update({
-            "responses": responses,
-            "metrics": new_metrics,
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("user_id", user_id).execute()
-
-        # Return summary
-        fmt = lambda v: f"₹{v/100000:.1f}L" if v >= 100000 else f"₹{v:,.0f}" if v else "—"
-        return (
-            f"Updated: {', '.join(updated_fields)}. "
-            f"New metrics — Income: {fmt(new_metrics['total_income'])}/mo, "
-            f"Surplus: {fmt(new_metrics['monthly_surplus'])}/mo, "
-            f"Net worth: {fmt(new_metrics['net_worth'])}, "
-            f"DTI: {new_metrics['dti']:.1f}%, "
-            f"Savings ratio: {new_metrics['savings_ratio']:.1f}%"
-        )
-
-    return _update_financial_profile
 
 
 def _build_research_agent(system_prompt: str, chat_history: list[dict] | None = None, extra_tools: list | None = None) -> Agent:
@@ -197,8 +55,8 @@ def _build_research_agent(system_prompt: str, chat_history: list[dict] | None = 
         region="in-en",
     )
 
-    cfg = prompts.agent_config
-    all_tools = [yf_tools, newspaper_tools, ddg_tools, _get_mf_nav, _search_instrument, _get_market_overview]
+    cfg = model_config.research_agent
+    all_tools = [yf_tools, newspaper_tools, ddg_tools, get_mf_nav, search_instrument, get_market_overview]
     if extra_tools:
         all_tools.extend(extra_tools)
     agent = Agent(
@@ -209,7 +67,7 @@ def _build_research_agent(system_prompt: str, chat_history: list[dict] | None = 
         markdown=False,
         tool_call_limit=cfg.get("tool_call_limit", 12),
         add_datetime_to_context=True,
-        timezone_identifier=cfg.get("timezone", "Asia/Kolkata"),
+        timezone_identifier=model_config.timezone,
     )
     return agent
 
@@ -258,9 +116,8 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
                 change = None
                 change_pct = None
                 try:
-                    from .yfinance_service import get_quote
-                    from .portfolio import extract_prices
                     quote = get_quote(symbol=display_symbol, exchange=exchange)
+                    from ..services.portfolio import extract_prices
                     _, prev_close = extract_prices(quote)
                     if prev_close and prev_close > 0:
                         change = price - prev_close
@@ -276,7 +133,7 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
                 })
 
         # MF NAV → add to price_items
-        elif name == "_get_mf_nav" and isinstance(result, dict) and result.get("nav"):
+        elif name == "get_mf_nav" and isinstance(result, dict) and result.get("nav"):
             price_items.append({
                 "scheme_name": result.get("scheme_name"),
                 "scheme_code": result.get("scheme_code") or args.get("scheme_code"),
@@ -340,13 +197,12 @@ def _build_minto_team(
     user_id: str = "",
 ) -> Team:
     """Build a route-mode Agno Team with Research and Alert specialist agents."""
-    from .alert_agent import _make_alert_agent
+    from .alert_agent import make_alert_agent
 
     research_agent = _build_research_agent(system_prompt, chat_history, extra_tools)
-    alert_agent = _make_alert_agent(supabase_client, user_id)
+    alert_agent = make_alert_agent(supabase_client, user_id)
 
-    cfg = prompts.raw.get("team_router", {}).get("config", {})
-    router_instructions = prompts.raw.get("team_router", {}).get("instructions", [])
+    cfg = model_config.team_router
 
     return Team(
         name="Minto Team",
@@ -356,11 +212,11 @@ def _build_minto_team(
             temperature=cfg.get("temperature", 0.1),
         ),
         members=[research_agent, alert_agent],
-        instructions=router_instructions,
+        instructions=prompts.team_router_instructions,
         show_members_responses=False,
         markdown=False,
         add_datetime_to_context=True,
-        timezone_identifier="Asia/Kolkata",
+        timezone_identifier=model_config.timezone,
     )
 
 

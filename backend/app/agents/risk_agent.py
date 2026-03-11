@@ -10,6 +10,7 @@ from agno.models.google import Gemini
 
 from ..core.config import GEMINI_API_KEY
 from ..core.prompts import prompts
+from ..core.model_config import model_config
 
 logger = logging.getLogger(__name__)
 
@@ -63,7 +64,7 @@ def run_risk_analysis(portfolio: dict, financial_profile: dict | None = None) ->
     context_str = "\n".join(context_parts)
 
     try:
-        cfg = prompts.risk_agent_config
+        cfg = model_config.risk_agent
         agent = Agent(
             model=Gemini(id=cfg.get("model", "gemini-3-flash-preview"), temperature=cfg.get("temperature", 0.2)),
             description=prompts.risk_agent_description,
@@ -73,7 +74,7 @@ def run_risk_analysis(portfolio: dict, financial_profile: dict | None = None) ->
             markdown=False,
             tool_call_limit=cfg.get("tool_call_limit", 0),
             add_datetime_to_context=True,
-            timezone_identifier=cfg.get("timezone", "Asia/Kolkata"),
+            timezone_identifier=model_config.timezone,
         )
 
         result = agent.run("Analyze this portfolio for concentration and diversification risks.")

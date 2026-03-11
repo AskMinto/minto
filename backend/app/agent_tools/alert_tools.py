@@ -1,18 +1,23 @@
+"""
+Alert agent tools — Supabase-backed callables for price alert CRUD.
+
+All three functions are closures that capture supabase_client and user_id,
+built via make_alert_tools() and passed directly to the Agno alert agent.
+"""
+
 from __future__ import annotations
 
 import json
 import logging
 
-from agno.agent import Agent
-from agno.models.google import Gemini
-
-from ..core.prompts import prompts
-
 logger = logging.getLogger(__name__)
 
 
-def _make_alert_agent(supabase_client, user_id: str) -> Agent:
-    """Build a per-request alert management agent backed by Supabase tools."""
+def make_alert_tools(supabase_client, user_id: str):
+    """Factory — returns (create_alert, list_alerts, cancel_alert) for the given user.
+
+    The returned functions are passed directly to the Agno alert agent as callable tools.
+    """
 
     def create_alert(
         display_name: str,
@@ -25,10 +30,10 @@ def _make_alert_agent(supabase_client, user_id: str) -> Agent:
         """Create a price alert for an equity or mutual fund.
 
         Args:
-            display_name: Human-readable instrument name (e.g. "SBI Bank", "Parag Parikh Flexi Cap").
+            display_name: Human-readable instrument name (e.g. "SBI Bank").
             alert_type: One of 'above', 'below', 'pct_change_up', 'pct_change_down'.
-            target_value: Price threshold (for above/below) or percentage magnitude (for pct_change_*).
-            symbol: Ticker symbol without exchange suffix, e.g. "SBIN" (equities only).
+            target_value: Price threshold (above/below) or percentage magnitude (pct_change_*).
+            symbol: Ticker without exchange suffix, e.g. "SBIN" (equities only).
             exchange: "NSE" or "BSE" (equities only, default "NSE").
             scheme_code: MFAPI integer scheme code (mutual funds only).
 
@@ -67,7 +72,7 @@ def _make_alert_agent(supabase_client, user_id: str) -> Agent:
         """List all active price alerts for the current user.
 
         Returns:
-            JSON array of active alert objects, each with id, display_name,
+            JSON array of active alert objects with id, display_name,
             alert_type, target_value, symbol, scheme_code, and created_at.
         """
         try:
@@ -106,20 +111,4 @@ def _make_alert_agent(supabase_client, user_id: str) -> Agent:
             logger.error(f"cancel_alert error: {e}")
             return json.dumps({"success": False, "error": str(e)})
 
-    cfg = prompts.raw.get("alert_agent", {}).get("config", {})
-    instructions = prompts.raw.get("alert_agent", {}).get("instructions", [])
-    role = prompts.raw.get("alert_agent", {}).get("role", "Manage price alerts")
-
-    return Agent(
-        name="Alert Agent",
-        role=role,
-        model=Gemini(
-            id=cfg.get("model", "gemini-3-flash-preview"),
-            temperature=cfg.get("temperature", 0.1),
-        ),
-        tools=[create_alert, list_alerts, cancel_alert],
-        instructions=instructions,
-        markdown=False,
-        add_datetime_to_context=True,
-        timezone_identifier="Asia/Kolkata",
-    )
+    return create_alert, list_alerts, cancel_alert

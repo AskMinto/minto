@@ -20,13 +20,14 @@ from ..services.guardrails import (
 )
 from ..services.mem0 import add_memory, get_memory
 from ..services.portfolio import compute_portfolio
-from ..services.research_agent import (
+from ..agents.research_agent import (
     run_research_agent,
     run_research_agent_stream,
     AgentNotConfigured,
-    _make_profile_update_tool,
 )
+from ..agent_tools.research_tools import make_profile_update_tool
 from ..core.config import ASSISTANT_DISCLAIMER, OPENAI_API_KEY
+from ..core.model_config import model_config
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -162,7 +163,7 @@ def _load_chat_context(supabase, user, chat_id: str):
     portfolio = compute_portfolio(holdings)
     memory = get_memory(user.user_id)
 
-    cfg = prompts.agent_config
+    cfg = model_config.research_agent
     max_history = cfg.get("max_history_messages", 10)
     max_msg_len = cfg.get("max_assistant_message_length", 500)
 
@@ -272,7 +273,7 @@ def send_message(
     prompt = _build_user_prompt(payload.content, memory, portfolio, financial_profile)
     system_prompt = _build_system_prompt(risk_profile)
 
-    profile_tool = _make_profile_update_tool(supabase, user.user_id)
+    profile_tool = make_profile_update_tool(supabase, user.user_id)
     extra_tools = [profile_tool]
 
     try:
@@ -331,7 +332,7 @@ def send_message_stream(
     prompt = _build_user_prompt(payload.content, memory, portfolio, financial_profile)
     system_prompt = _build_system_prompt(risk_profile)
 
-    profile_tool = _make_profile_update_tool(supabase, user.user_id)
+    profile_tool = make_profile_update_tool(supabase, user.user_id)
     extra_tools = [profile_tool]
 
     def event_generator():
@@ -432,14 +433,9 @@ async def get_voice_token(user: UserContext = Depends(get_user_context)):
     agent_instructions = "\n".join(prompts.agent_instructions)
     context_prompt = _build_user_prompt("", memory, portfolio, financial_profile)
 
-    voice_hint = (
-        "\n\nVOICE BEHAVIOR: You are in a voice conversation. "
-        "Keep responses concise and conversational — speak naturally as if talking to a person. "
-        "When you need to look something up using a tool, briefly say so first "
-        "(e.g. 'Let me check that for you') before the tool call completes. "
-        "Avoid reading out long lists, markdown, or bullet points — convert them to natural speech."
-    )
-    full_instructions = f"{system_prompt}\n\n{agent_instructions}\n\n{context_prompt}{voice_hint}"
+    voice_cfg = model_config.voice_agent
+    voice_hint = prompts.voice_agent_hint
+    full_instructions = f"{system_prompt}\n\n{agent_instructions}\n\n{voice_hint}\n\n{context_prompt}"
 
     try:
         async with httpx.AsyncClient() as client:
@@ -450,11 +446,11 @@ async def get_voice_token(user: UserContext = Depends(get_user_context)):
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": "gpt-4o-realtime-preview-2024-12-17",
-                    "voice": "verse",
+                    "model": voice_cfg["model"],
+                    "voice": voice_cfg["voice"],
                     "instructions": full_instructions,
                     "input_audio_transcription": {
-                        "model": "whisper-1",
+                        "model": voice_cfg["input_audio_transcription_model"],
                     },
                     "tools": [
                         {
@@ -474,7 +470,7 @@ async def get_voice_token(user: UserContext = Depends(get_user_context)):
                         },
                         {
                             "type": "function",
-                            "name": "_get_mf_nav",
+                            "name": "get_mf_nav",
                             "description": "Get the current NAV for a mutual fund.",
                             "parameters": {
                                 "type": "object",
@@ -489,7 +485,7 @@ async def get_voice_token(user: UserContext = Depends(get_user_context)):
                         },
                         {
                             "type": "function",
-                            "name": "_search_instrument",
+                            "name": "search_instrument",
                             "description": "Search for stocks or mutual fund schemes by name, symbol, or ISIN.",
                             "parameters": {
                                 "type": "object",
@@ -499,13 +495,13 @@ async def get_voice_token(user: UserContext = Depends(get_user_context)):
                         },
                         {
                             "type": "function",
-                            "name": "_get_market_overview",
+                            "name": "get_market_overview",
                             "description": "Get current Indian market overview including Nifty 50, Sensex, and Bank Nifty.",
                             "parameters": {"type": "object", "properties": {}},
                         },
                         {
                             "type": "function",
-                            "name": "_update_financial_profile",
+                            "name": "update_financial_profile",
                             "description": "Update the user's financial profile / balance sheet.",
                             "parameters": {
                                 "type": "object",
@@ -565,6 +561,7 @@ async def get_voice_token(user: UserContext = Depends(get_user_context)):
             response.raise_for_status()
             data = response.json()
             data["recent_history"] = recent_history
+            data["model"] = voice_cfg["model"]
             return data
     except Exception as e:
         logger.error(f"Error fetching Realtime API token: {e}")
@@ -584,11 +581,11 @@ async def execute_voice_tool(
     payload: ToolCallPayload, user: UserContext = Depends(get_user_context)
 ):
     """Proxy tool calls from the voice agent to the backend services."""
-    from ..services.research_agent import (
-        _get_mf_nav,
-        _search_instrument,
-        _get_market_overview,
-        _make_profile_update_tool,
+    from ..agent_tools.research_tools import (
+        get_mf_nav,
+        search_instrument,
+        get_market_overview,
+        make_profile_update_tool,
     )
 
     try:
@@ -598,18 +595,18 @@ async def execute_voice_tool(
             symbol = str(payload.arguments.get("symbol", ""))
             quote = get_quote(symbol, None)
             return quote or {"error": "Could not fetch quote"}
-        elif payload.name == "_get_mf_nav":
+        elif payload.name == "get_mf_nav":
             scheme_code = int(payload.arguments.get("scheme_code", 0))
-            return json.loads(_get_mf_nav(scheme_code))
-        elif payload.name == "_search_instrument":
+            return json.loads(get_mf_nav(scheme_code))
+        elif payload.name == "search_instrument":
             query = str(payload.arguments.get("query", ""))
-            return json.loads(_search_instrument(query))
-        elif payload.name == "_get_market_overview":
-            return json.loads(_get_market_overview())
-        elif payload.name == "_update_financial_profile":
+            return json.loads(search_instrument(query))
+        elif payload.name == "get_market_overview":
+            return json.loads(get_market_overview())
+        elif payload.name == "update_financial_profile":
             updates = str(payload.arguments.get("updates", "{}"))
             supabase = get_supabase_client(user.token)
-            tool = _make_profile_update_tool(supabase, user.user_id)
+            tool = make_profile_update_tool(supabase, user.user_id)
             return {"result": tool(updates)}
         elif payload.name == "get_company_news":
             from ..services.yfinance_service import get_news
