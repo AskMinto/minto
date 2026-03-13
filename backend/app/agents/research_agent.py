@@ -53,6 +53,7 @@ def _build_research_agent(system_prompt: str, chat_history: list[dict] | None = 
         enable_news=True,
         fixed_max_results=5,
         region="in-en",
+        backend="auto",  # tries Bing/Brave/Yahoo when DuckDuckGo is blocked (common on GCP Cloud Run)
     )
 
     cfg = model_config.research_agent
