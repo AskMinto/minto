@@ -346,27 +346,15 @@ def run_team_stream(
                 full_content += token
                 yield {"type": "token", "content": token}
 
-        # Run completed — Agno attaches the full RunOutput here with populated tools
+        # RunCompletedEvent fires when a member agent finishes.
+        # member_responses contains fully populated RunOutput objects with tool results.
         elif event == TeamRunEvent.run_completed:
-            if hasattr(chunk, "run_response") and chunk.run_response:
-                final_run_output = chunk.run_response
-
-    # Extract widgets from the final completed run output — this is where
-    # tool_args and results are fully populated for all member tool calls.
-    if final_run_output:
-        all_widgets = _extract_widgets(final_run_output)
-    else:
-        # Fallback: try member_responses on the team result
-        try:
-            team_result = team.run_response
-            if team_result and hasattr(team_result, "member_responses"):
-                for mr in (team_result.member_responses or []):
+            if hasattr(chunk, "member_responses"):
+                for mr in (chunk.member_responses or []):
                     if hasattr(mr, "tools") and mr.tools:
                         all_widgets.extend(_extract_widgets(mr))
-        except Exception:
-            pass
 
-    logger.debug(f"Stream done: content_len={len(full_content)}, widgets={len(all_widgets)}")
+    logger.info(f"[MINTO] Stream done: content_len={len(full_content)}, widgets={len(all_widgets)}")
     yield {"type": "done", "content": full_content, "widgets": all_widgets}
 
 
