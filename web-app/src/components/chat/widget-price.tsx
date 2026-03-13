@@ -17,6 +17,7 @@ import {
 
 interface PriceItem {
   symbol?: string;
+  exchange?: string;
   scheme_name?: string;
   scheme_code?: number;
   fund_house?: string;
@@ -97,7 +98,7 @@ function DetailModal({ item, onClose }: { item: PriceItem; onClose: () => void }
           <div className="flex items-center gap-2 flex-shrink-0">
             {!isMF && item.symbol && (
               <a
-                href={`https://finance.yahoo.com/quote/${item.symbol}`}
+                href={`https://finance.yahoo.com/quote/${item.symbol}.${item.exchange === "BSE" ? "BO" : "NS"}/`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-600 hover:bg-purple-700 transition-colors text-white text-[11px] font-semibold"

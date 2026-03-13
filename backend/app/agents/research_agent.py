@@ -136,6 +136,7 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
                     change_pct = (change / prev_close * 100) if change is not None else None
                     price_items.append({
                         "symbol": display_symbol,
+                        "exchange": exchange,
                         "price": price,
                         "change": change,
                         "change_pct": change_pct,
