@@ -94,12 +94,25 @@ function DetailModal({ item, onClose }: { item: PriceItem; onClose: () => void }
               ? (detail?.scheme_name || item.scheme_name || "Mutual Fund") as string
               : (detail?.name || item.symbol || "Detail") as string}
           </h2>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-black/5 flex items-center justify-center hover:bg-black/10 flex-shrink-0"
-          >
-            <X size={16} className="text-minto-text-muted" />
-          </button>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {!isMF && item.symbol && (
+              <a
+                href={`https://finance.yahoo.com/quote/${item.symbol}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-600 hover:bg-purple-700 transition-colors text-white text-[11px] font-semibold"
+              >
+                <ExternalLink size={11} />
+                View on Yahoo Finance
+              </a>
+            )}
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-black/5 flex items-center justify-center hover:bg-black/10"
+            >
+              <X size={16} className="text-minto-text-muted" />
+            </button>
+          </div>
         </div>
 
         <div className="px-6 pb-6">
@@ -260,22 +273,29 @@ function PriceChip({ item, onClick }: { item: PriceItem; onClick: () => void }) 
   return (
     <button
       onClick={onClick}
-      className="glass-card flex items-center gap-2.5 px-3.5 py-2.5 cursor-pointer hover:bg-white/70 transition-colors text-left min-w-[140px]"
+      className="glass-card flex items-center gap-2.5 px-3.5 py-2.5 cursor-pointer hover:bg-white/70 transition-colors text-left"
+      style={{ minWidth: 180 }}
     >
       <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}>
         <Icon size={13} className={changeColor} />
       </div>
-      <div className="min-w-0">
-        <p className="font-semibold text-minto-text-muted truncate text-[10px] uppercase tracking-wide mb-0.5">{shortLabel}</p>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-minto-text font-bold text-sm">{value}</span>
-          {hasChange && (
-            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
-              isUp ? "bg-minto-positive/10 text-minto-positive" : "bg-minto-negative/10 text-minto-negative"
-            }`}>
-              {isUp ? "+" : ""}{item.change_pct!.toFixed(2)}%
-            </span>
-          )}
+      <div className="flex flex-col min-w-0">
+        <p className="font-medium text-minto-text-muted truncate text-[10px] uppercase tracking-wide leading-none mb-1">
+          {shortLabel}
+        </p>
+        <div className="flex items-center gap-1.5">
+          <span className="text-minto-text font-bold text-[13px] leading-none whitespace-nowrap">{value}</span>
+          <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full leading-none whitespace-nowrap ${
+            hasChange
+              ? isUp
+                ? "bg-minto-positive/10 text-minto-positive"
+                : "bg-minto-negative/10 text-minto-negative"
+              : "bg-black/5 text-minto-text-muted"
+          }`}>
+            {hasChange
+              ? `${isUp ? "+" : ""}${item.change_pct!.toFixed(2)}%`
+              : "—"}
+          </span>
         </div>
       </div>
     </button>
