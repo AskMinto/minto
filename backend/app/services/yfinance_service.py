@@ -151,20 +151,32 @@ def get_quote(symbol: str | None, exchange: str | None) -> dict[str, Any]:
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
             ticker = yf.Ticker(yahoo_symbol)
-            hist = ticker.history(period="5d", interval="1d")
-        if hist is None or hist.empty:
-            _failed_symbol_cache[cache_key] = True
-            data = {}
-        else:
-            close_series = hist["Close"]
-            last_close = float(close_series.iloc[-1])
-            prev_close = float(close_series.iloc[-2]) if len(close_series) > 1 else None
+            # fast_info is a single lightweight API call that reliably returns
+            # last_price and previous_close even during market hours on Cloud Run.
+            fi = ticker.fast_info
+            price = float(fi.last_price) if fi.last_price else None
+            prev_close = float(fi.previous_close) if fi.previous_close else None
+
+            # Fall back to history if fast_info returns nothing
+            if not price:
+                hist = ticker.history(period="5d", interval="1d")
+                if hist is None or hist.empty:
+                    _failed_symbol_cache[cache_key] = True
+                    data = {}
+                else:
+                    close_series = hist["Close"]
+                    price = float(close_series.iloc[-1])
+                    prev_close = float(close_series.iloc[-2]) if len(close_series) > 1 else prev_close
+
+        if price:
             data = {
                 "symbol": _strip_suffix(symbol) or yahoo_symbol,
                 "yahoo_symbol": yahoo_symbol,
-                "price": last_close,
+                "price": price,
                 "previous_close": prev_close,
             }
+        else:
+            data = {}
     except Exception:
         data = {}
 

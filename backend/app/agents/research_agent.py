@@ -95,11 +95,19 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
 
         # Stock price → add to price_items with change data
         if name == "get_current_stock_price":
-            # YFinanceTools returns a natural-language string like
-            # "The current price of SBIN is ₹823.45" — not a raw number.
-            # Use get_quote() directly for both price and previous_close
-            # (it has a 30s TTL cache so the agent's prior call is a hit).
+            # args["symbol"] comes through in non-team runs. In Agno Team streaming,
+            # tool_args is often {} for member tool calls — so fall back to parsing
+            # the symbol out of the NL result string (e.g. "The current price of INFY.NS is ₹1823").
+            import re as _re
             symbol = args.get("symbol", "")
+            if not symbol and isinstance(result_str, str):
+                m = _re.search(r'\b([A-Z]{2,10}(?:\.NS|\.BO)?)\b', result_str)
+                if m:
+                    symbol = m.group(1)
+
+            if not symbol:
+                continue
+
             display_symbol = symbol
             exchange = None
             for suffix in (".NS", ".BO", ".ns", ".bo"):

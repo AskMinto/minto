@@ -8,6 +8,7 @@ from agno.models.google import Gemini
 from ..core.prompts import prompts
 from ..core.model_config import model_config
 from ..agent_tools.alert_tools import make_alert_tools
+from ..agent_tools.research_tools import search_instrument
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +25,7 @@ def make_alert_agent(supabase_client, user_id: str) -> Agent:
             id=cfg.get("model", "gemini-3-flash-preview"),
             temperature=cfg.get("temperature", 0.1),
         ),
-        tools=[create_alert, list_alerts, cancel_alert, request_alert_widget],
+        tools=[create_alert, list_alerts, cancel_alert, request_alert_widget, search_instrument],
         instructions=prompts.alert_agent_instructions,
         markdown=False,
         add_datetime_to_context=True,

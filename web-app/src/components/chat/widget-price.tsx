@@ -253,24 +253,26 @@ function PriceChip({ item, onClick }: { item: PriceItem; onClick: () => void }) 
     : `NAV ₹${item.nav?.toFixed(2)}`;
   const hasChange = item.change != null && item.change_pct != null;
   const isUp = hasChange ? (item.change ?? 0) >= 0 : null;
-  const Icon = isUp === null ? null : isUp ? TrendingUp : TrendingDown;
-  const changeColor = isUp === null ? "text-minto-text-muted" : isUp ? "text-minto-positive" : "text-minto-negative";
-  const iconBg = isUp === null ? "bg-minto-text-muted/10" : isUp ? "bg-minto-positive/10" : "bg-minto-negative/10";
+  const changeColor = isUp === true ? "text-minto-positive" : isUp === false ? "text-minto-negative" : "text-minto-text-muted";
+  const iconBg = isUp === true ? "bg-minto-positive/10" : isUp === false ? "bg-minto-negative/10" : "bg-minto-text-muted/10";
+  const Icon = isUp === true ? TrendingUp : isUp === false ? TrendingDown : TrendingUp;
 
   return (
     <button
       onClick={onClick}
-      className="glass-card flex items-center gap-2 px-3 py-2 text-xs cursor-pointer hover:bg-white/70 transition-colors text-left"
+      className="glass-card flex items-center gap-2.5 px-3.5 py-2.5 cursor-pointer hover:bg-white/70 transition-colors text-left min-w-[140px]"
     >
-      <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${iconBg}`}>
-        {Icon && <Icon size={12} className={changeColor} />}
+      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${iconBg}`}>
+        <Icon size={13} className={changeColor} />
       </div>
       <div className="min-w-0">
-        <p className="font-semibold text-minto-text truncate">{shortLabel}</p>
-        <div className="flex items-center gap-1.5">
-          <span className="text-minto-text-secondary font-medium">{value}</span>
+        <p className="font-semibold text-minto-text-muted truncate text-[10px] uppercase tracking-wide mb-0.5">{shortLabel}</p>
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-minto-text font-bold text-sm">{value}</span>
           {hasChange && (
-            <span className={`${changeColor} font-medium`}>
+            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${
+              isUp ? "bg-minto-positive/10 text-minto-positive" : "bg-minto-negative/10 text-minto-negative"
+            }`}>
               {isUp ? "+" : ""}{item.change_pct!.toFixed(2)}%
             </span>
           )}

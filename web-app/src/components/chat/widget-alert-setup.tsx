@@ -59,7 +59,38 @@ export function WidgetAlertSetup({ data, messageId }: { data: AlertSetupData; me
 
   const instrumentSelected = !!(displayName && (symbol || schemeCode));
 
-  // Debounced search
+  // Auto-search on mount if the agent passed a display_name but no symbol,
+  // and auto-select the top result so the widget arrives fully prefilled.
+  const autoSearched = useRef(false);
+  useEffect(() => {
+    if (autoSearched.current) return;
+    if (data.display_name && !data.symbol && !data.scheme_code) {
+      autoSearched.current = true;
+      (async () => {
+        setSearching(true);
+        try {
+          const res = await apiGet<{ results: SearchResult[] }>(
+            `/instruments/search?query=${encodeURIComponent(data.display_name!)}`
+          );
+          const results = res.results || [];
+          if (results.length > 0) {
+            // Auto-select the top result
+            selectInstrument(results[0]);
+          } else {
+            setSearchResults(results);
+            setShowDropdown(true);
+          }
+        } catch {
+          /* silent */
+        } finally {
+          setSearching(false);
+        }
+      })();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Debounced search for manual user input
   useEffect(() => {
     if (!searchQuery.trim() || instrumentSelected) {
       setSearchResults([]);
@@ -69,10 +100,10 @@ export function WidgetAlertSetup({ data, messageId }: { data: AlertSetupData; me
     const t = setTimeout(async () => {
       setSearching(true);
       try {
-        const data = await apiGet<{ results: SearchResult[] }>(
+        const res = await apiGet<{ results: SearchResult[] }>(
           `/instruments/search?query=${encodeURIComponent(searchQuery)}`
         );
-        setSearchResults(data.results || []);
+        setSearchResults(res.results || []);
         setShowDropdown(true);
       } catch {
         setSearchResults([]);
