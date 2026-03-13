@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import alerts, cas, chats, dashboard, financial_profiles, holdings, market, risk, zerodha
+from .routers import alerts, cas, chats, dashboard, financial_profiles, holdings, market, risk, user, zerodha
 from .services.alert_poller import start_alert_scheduler, stop_alert_scheduler
 
 
@@ -33,6 +33,7 @@ app.include_router(chats.router)
 app.include_router(zerodha.router)
 app.include_router(financial_profiles.router)
 app.include_router(alerts.router)
+app.include_router(user.router)
 
 
 @app.get("/")

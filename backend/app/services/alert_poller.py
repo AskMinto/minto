@@ -7,6 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from supabase import create_client
 
 from ..core.config import SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+from .whatsapp import send_whatsapp_alert
 
 logger = logging.getLogger(__name__)
 scheduler = AsyncIOScheduler()
@@ -82,7 +83,7 @@ def _compose_notification(alert: dict, triggered_price: float) -> str:
 
 
 async def _fire_alert(supabase, alert: dict, triggered_price: float):
-    """Mark alert triggered and write a chat notification message for the user."""
+    """Mark alert triggered, write a chat notification, and send WhatsApp if phone is set."""
     now = datetime.now(timezone.utc).isoformat()
 
     # Mark triggered
@@ -123,6 +124,21 @@ async def _fire_alert(supabase, alert: dict, triggered_price: float):
     }).execute()
 
     supabase.table("chats").update({"last_message_at": now}).eq("id", chat_id).execute()
+
+    # Send WhatsApp if user has a phone number
+    try:
+        user_result = (
+            supabase.table("users")
+            .select("phone_number")
+            .eq("id", alert["user_id"])
+            .limit(1)
+            .execute()
+        )
+        phone = (user_result.data or [{}])[0].get("phone_number")
+        if phone:
+            send_whatsapp_alert(phone, message)
+    except Exception as e:
+        logger.warning(f"WhatsApp lookup/send failed for alert {alert['id']}: {e}")
 
     logger.info(
         f"Alert fired: id={alert['id']}, user={alert['user_id']}, "

@@ -1,4 +1,5 @@
 apscheduler==3.10.4
+twilio==9.4.5
 fastapi==0.133.0
 uvicorn==0.41.0
 python-dotenv==1.2.1
