@@ -96,15 +96,26 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
 
         # Stock price → add to price_items with change data
         if name == "get_current_stock_price":
-            # args["symbol"] comes through in non-team runs. In Agno Team streaming,
-            # tool_args is often {} for member tool calls — so fall back to parsing
-            # the symbol out of the NL result string (e.g. "The current price of INFY.NS is ₹1823").
+            # In Agno Team streaming, tool_args is {} for member tool calls.
+            # Parse symbol and price directly from the NL result string, same
+            # pattern as get_mf_nav which reads entirely from result.
+            # e.g. "The current price of INFY.NS is ₹1,823.45 INR as of ..."
             import re as _re
             symbol = args.get("symbol", "")
-            if not symbol and isinstance(result_str, str):
-                m = _re.search(r'\b([A-Z]{2,10}(?:\.NS|\.BO)?)\b', result_str)
-                if m:
-                    symbol = m.group(1)
+            price_from_result: float | None = None
+
+            if isinstance(result_str, str):
+                # Extract ticker symbol: word before "is" that contains letters + optional .NS/.BO
+                sym_match = _re.search(r'\bof\s+([A-Z]{1,10}(?:\.NS|\.BO)?)\b', result_str)
+                if sym_match and not symbol:
+                    symbol = sym_match.group(1)
+                # Extract price from result string as fallback
+                price_match = _re.search(r'[\u20B9₹]\s*([\d,]+\.?\d*)', result_str)
+                if price_match:
+                    try:
+                        price_from_result = float(price_match.group(1).replace(",", ""))
+                    except ValueError:
+                        pass
 
             if not symbol:
                 continue
@@ -118,7 +129,7 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
                     break
             try:
                 quote = get_quote(symbol=display_symbol, exchange=exchange)
-                price = quote.get("price")
+                price = quote.get("price") or price_from_result
                 prev_close = quote.get("previous_close")
                 if price:
                     change = (price - prev_close) if prev_close and prev_close > 0 else None
@@ -299,6 +310,7 @@ def run_team_stream(
     stream = team.run(user_prompt, stream=True, stream_events=True)
     full_content = ""
     all_widgets: list[dict] = []
+    final_run_output: RunOutput | None = None
 
     for chunk in stream:
         event = getattr(chunk, "event", None)
@@ -317,21 +329,15 @@ def run_team_stream(
                 tool_name = chunk.tool.tool_name or ""
             yield {"type": "tool_started", "tool_name": tool_name}
 
-        # Member tool call completed — extract widgets immediately
+        # Member tool call completed — yield for UI feedback only.
+        # Don't extract widgets here: tool_args and result are not populated
+        # in Team streaming events for member tool calls.
         elif event in (TeamRunEvent.tool_call_completed, RunEvent.tool_call_completed):
             tool_name = ""
-            tool_widgets: list[dict] = []
             if hasattr(chunk, "tool") and chunk.tool:
                 tool_name = chunk.tool.tool_name or ""
-                mock = RunOutput()
-                mock.tools = [chunk.tool]
-                tool_widgets = _extract_widgets(mock)
-                all_widgets.extend(tool_widgets)
-            yield {
-                "type": "tool_completed",
-                "tool_name": tool_name,
-                "widgets": tool_widgets,
-            }
+                logger.debug(f"Tool completed: {tool_name} args={getattr(chunk.tool, 'tool_args', {})} result_len={len(getattr(chunk.tool, 'result', '') or '')}")
+            yield {"type": "tool_completed", "tool_name": tool_name, "widgets": []}
 
         # Member intermediate content (agent streaming its response)
         elif event == TeamRunEvent.run_intermediate_content:
@@ -340,6 +346,27 @@ def run_team_stream(
                 full_content += token
                 yield {"type": "token", "content": token}
 
+        # Run completed — Agno attaches the full RunOutput here with populated tools
+        elif event == TeamRunEvent.run_completed:
+            if hasattr(chunk, "run_response") and chunk.run_response:
+                final_run_output = chunk.run_response
+
+    # Extract widgets from the final completed run output — this is where
+    # tool_args and results are fully populated for all member tool calls.
+    if final_run_output:
+        all_widgets = _extract_widgets(final_run_output)
+    else:
+        # Fallback: try member_responses on the team result
+        try:
+            team_result = team.run_response
+            if team_result and hasattr(team_result, "member_responses"):
+                for mr in (team_result.member_responses or []):
+                    if hasattr(mr, "tools") and mr.tools:
+                        all_widgets.extend(_extract_widgets(mr))
+        except Exception:
+            pass
+
+    logger.debug(f"Stream done: content_len={len(full_content)}, widgets={len(all_widgets)}")
     yield {"type": "done", "content": full_content, "widgets": all_widgets}
 
 
