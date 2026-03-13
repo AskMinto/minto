@@ -310,7 +310,9 @@ def run_team_stream(
     stream = team.run(user_prompt, stream=True, stream_events=True)
     full_content = ""
     all_widgets: list[dict] = []
-    final_run_output: RunOutput | None = None
+    # Save tool_args from started events keyed by tool_call_id —
+    # args ARE populated on started, but result is only on completed.
+    _pending_tool_args: dict[str, dict] = {}
 
     for chunk in stream:
         event = getattr(chunk, "event", None)
@@ -322,22 +324,34 @@ def run_team_stream(
                 full_content += token
                 yield {"type": "token", "content": token}
 
-        # Member tool call started — surface to caller for UI feedback
+        # Tool started — save args so we can use them when it completes
         elif event in (TeamRunEvent.tool_call_started, RunEvent.tool_call_started):
             tool_name = ""
             if hasattr(chunk, "tool") and chunk.tool:
                 tool_name = chunk.tool.tool_name or ""
+                call_id = chunk.tool.tool_call_id or tool_name
+                _pending_tool_args[call_id] = {
+                    "name": tool_name,
+                    "args": chunk.tool.tool_args or {},
+                }
             yield {"type": "tool_started", "tool_name": tool_name}
 
-        # Member tool call completed — yield for UI feedback only.
-        # Don't extract widgets here: tool_args and result are not populated
-        # in Team streaming events for member tool calls.
+        # Tool completed — result is populated here; retrieve saved args by call_id
         elif event in (TeamRunEvent.tool_call_completed, RunEvent.tool_call_completed):
             tool_name = ""
+            tool_widgets: list[dict] = []
             if hasattr(chunk, "tool") and chunk.tool:
                 tool_name = chunk.tool.tool_name or ""
-                logger.debug(f"Tool completed: {tool_name} args={getattr(chunk.tool, 'tool_args', {})} result_len={len(getattr(chunk.tool, 'result', '') or '')}")
-            yield {"type": "tool_completed", "tool_name": tool_name, "widgets": []}
+                call_id = chunk.tool.tool_call_id or tool_name
+                saved = _pending_tool_args.pop(call_id, {})
+                # Reconstruct a fully populated ToolExecution for _extract_widgets
+                chunk.tool.tool_args = chunk.tool.tool_args or saved.get("args", {})
+                mock = RunOutput()
+                mock.tools = [chunk.tool]
+                tool_widgets = _extract_widgets(mock)
+                all_widgets.extend(tool_widgets)
+                logger.info(f"[MINTO] Tool completed: {tool_name}, args={chunk.tool.tool_args}, result_len={len(chunk.tool.result or '')}, widgets={len(tool_widgets)}")
+            yield {"type": "tool_completed", "tool_name": tool_name, "widgets": tool_widgets}
 
         # Member intermediate content (agent streaming its response)
         elif event == TeamRunEvent.run_intermediate_content:
@@ -346,13 +360,21 @@ def run_team_stream(
                 full_content += token
                 yield {"type": "token", "content": token}
 
-        # RunCompletedEvent fires when a member agent finishes.
-        # member_responses contains fully populated RunOutput objects with tool results.
+        # RunCompletedEvent — member_responses has fully populated tools as a second pass
         elif event == TeamRunEvent.run_completed:
             if hasattr(chunk, "member_responses"):
                 for mr in (chunk.member_responses or []):
                     if hasattr(mr, "tools") and mr.tools:
-                        all_widgets.extend(_extract_widgets(mr))
+                        extra = _extract_widgets(mr)
+                        # Deduplicate against already-collected widgets by symbol/scheme_code
+                        existing_keys = {
+                            w["data"].get("items", [{}])[0].get("symbol") or
+                            str(w["data"].get("items", [{}])[0].get("scheme_code", ""))
+                            for w in all_widgets if w.get("type") == "price_summary"
+                        }
+                        for w in extra:
+                            if w.get("type") != "price_summary" or not existing_keys:
+                                all_widgets.append(w)
 
     logger.info(f"[MINTO] Stream done: content_len={len(full_content)}, widgets={len(all_widgets)}")
     yield {"type": "done", "content": full_content, "widgets": all_widgets}
