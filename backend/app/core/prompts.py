@@ -292,5 +292,12 @@ class Prompts:
     def team_router_instructions(self) -> list[str]:
         return self._data["team_router"].get("instructions", [])
 
+    # ── Raw access (for sections without typed accessors) ────────────────────
+
+    @property
+    def raw(self) -> dict[str, Any]:
+        """Direct access to the full prompts.yaml dict."""
+        return self._data
+
 
 prompts = Prompts()

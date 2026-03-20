@@ -39,6 +39,8 @@ KITE_REDIRECT_URL = _get_env("KITE_REDIRECT_URL")
 TWILIO_ACCOUNT_SID = _get_env("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = _get_env("TWILIO_AUTH_TOKEN")
 TWILIO_WHATSAPP_FROM = _get_env("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
+# WhatsApp Bot — GCS bucket for DPDPA-compliant raw file storage
+GCS_BUCKET_NAME = _get_env("GCS_BUCKET_NAME", "minto-wa-uploads")
 
 MFAPI_BASE_URL = _get_env("MFAPI_BASE_URL", "https://api.mfapi.in")
 

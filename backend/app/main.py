@@ -4,11 +4,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .routers import alerts, cas, chats, dashboard, financial_profiles, holdings, market, risk, user, zerodha
-from .services.alert_poller import start_alert_scheduler, stop_alert_scheduler
+from .services.alert_poller import scheduler as alert_scheduler, start_alert_scheduler, stop_alert_scheduler
+from .whatsapp_bot.reminder_scheduler import start_wa_reminder_scheduler
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Register WhatsApp reminder job on the shared scheduler before it starts
+    start_wa_reminder_scheduler(alert_scheduler)
     start_alert_scheduler()
     yield
     stop_alert_scheduler()
@@ -34,6 +37,9 @@ app.include_router(zerodha.router)
 app.include_router(financial_profiles.router)
 app.include_router(alerts.router)
 app.include_router(user.router)
+
+from .whatsapp_bot.router import router as whatsapp_router
+app.include_router(whatsapp_router, prefix="/whatsapp", tags=["whatsapp"])
 
 
 @app.get("/")
