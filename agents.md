@@ -2,7 +2,7 @@
 
 ## gstack
 
-gstack is installed globally at `~/.claude/skills/gstack`.
+gstack is installed globally at `~/.cosine/skills/gstack`.
 
 **Web browsing — always use `/browse`**: Never use built-in browser tools or web search tools directly. Always use the `$gstack-browse` skill (i.e. prefix your prompt with `$gstack-browse`) for any web browsing, URL reading, or web research tasks.
 
