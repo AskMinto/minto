@@ -1,7 +1,10 @@
-"""LLM-powered document parser using Gemini 3 Flash.
+"""LLM-powered document parser using Gemini 2.0 Flash.
 
 Parses all four document types — CAS, Broker P&L, Broker Holdings, and ITR —
 via the Gemini File API (for PDFs) or inline text (for CSVs/Excel).
+
+Uses the google-genai SDK (google.genai) which is the current non-deprecated
+library already present in requirements.txt.
 
 No casparser/pdfminer dependency — pure LLM extraction.
 """
@@ -11,45 +14,80 @@ from __future__ import annotations
 import io
 import json
 import logging
-import time
+import re
 from typing import Optional
+
+from pydantic import ValidationError
 
 from ..core.config import GEMINI_API_KEY
 from .models import CASResult, BrokerPLResult, BrokerHoldingsResult, ITRResult
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "gemini-2.0-flash"   # Stable Flash model for document parsing
+_MODEL = "gemini-2.0-flash"
 
 
-def _genai_client():
-    import google.generativeai as genai
-    genai.configure(api_key=GEMINI_API_KEY)
-    return genai
+def _client():
+    """Return a configured google.genai client."""
+    from google import genai
+    return genai.Client(api_key=GEMINI_API_KEY)
 
 
-def _upload_pdf_to_gemini(genai, pdf_bytes: bytes, display_name: str = "document.pdf"):
-    """Upload PDF bytes to Gemini File API. Returns file reference."""
-    file_ref = genai.upload_file(
-        io.BytesIO(pdf_bytes),
-        mime_type="application/pdf",
-        display_name=display_name,
+def _upload_pdf(client, pdf_bytes: bytes, display_name: str = "document.pdf"):
+    """Upload PDF bytes via the Gemini File API. Returns the file object."""
+    import time
+    file_ref = client.files.upload(
+        file=io.BytesIO(pdf_bytes),
+        config={"mime_type": "application/pdf", "display_name": display_name},
     )
-    # Wait for file to be ACTIVE (usually <2s)
-    for _ in range(20):
-        status = genai.get_file(file_ref.name)
-        if status.state.name == "ACTIVE":
-            return file_ref
+    # Wait for ACTIVE state (usually <3s)
+    for _ in range(30):
+        f = client.files.get(name=file_ref.name)
+        if f.state.name == "ACTIVE":
+            return f
         time.sleep(1)
-    raise RuntimeError(f"Gemini file {file_ref.name} not ACTIVE after 20s")
+    raise RuntimeError(f"Gemini file {file_ref.name} not ACTIVE after 30s")
 
 
-def _delete_gemini_file(genai, file_ref) -> None:
-    """Delete a Gemini File API upload."""
+def _delete_pdf(client, file_ref) -> None:
+    """Delete a Gemini File API upload immediately after parsing."""
     try:
-        genai.delete_file(file_ref.name)
+        client.files.delete(name=file_ref.name)
     except Exception as e:
         logger.warning(f"Failed to delete Gemini file {file_ref.name}: {e}")
+
+
+def _extract_json(text: str) -> dict:
+    """Extract and parse JSON from a model response robustly.
+
+    Handles:
+    - Clean JSON responses
+    - JSON wrapped in ```json ... ``` fences
+    - JSON preceded or followed by explanation text
+    """
+    text = text.strip()
+
+    # Strip markdown fences if present
+    fence_match = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", text)
+    if fence_match:
+        text = fence_match.group(1).strip()
+
+    # Try direct parse
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Find the outermost JSON object
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
+            return json.loads(text[start:end + 1])
+        except json.JSONDecodeError:
+            pass
+
+    raise ValueError(f"Could not extract valid JSON from model response: {text[:200]}")
 
 
 def _read_excel_as_text(excel_bytes: bytes) -> str:
@@ -158,20 +196,23 @@ RULES:
 
 async def parse_cas(pdf_bytes: bytes) -> CASResult:
     """Parse a CAS PDF using Gemini File API."""
-    genai = _genai_client()
-    file_ref = _upload_pdf_to_gemini(genai, pdf_bytes, "cas.pdf")
+    client = _client()
+    file_ref = _upload_pdf(client, pdf_bytes, "cas.pdf")
 
     try:
-        model = genai.GenerativeModel(
-            model_name=_MODEL,
-            generation_config={"response_mime_type": "application/json"},
+        response = client.models.generate_content(
+            model=_MODEL,
+            contents=[_CAS_PROMPT, file_ref],
+            config={"response_mime_type": "application/json"},
         )
-        response = model.generate_content([_CAS_PROMPT, file_ref])
-        raw = response.text
-        data = json.loads(raw)
-        return CASResult(**data)
+        data = _extract_json(response.text)
+        try:
+            return CASResult(**data)
+        except (ValidationError, TypeError) as e:
+            logger.warning(f"parse_cas: Pydantic validation issue, using partial data: {e}")
+            return CASResult.model_validate(data, strict=False)
     finally:
-        _delete_gemini_file(genai, file_ref)
+        _delete_pdf(client, file_ref)
 
 
 # ── Broker Tax P&L Parser ─────────────────────────────────────────────────────
@@ -224,34 +265,37 @@ RULES:
 
 async def parse_broker_pl(content: bytes, content_type: str) -> BrokerPLResult:
     """Parse a broker Tax P&L report (CSV, Excel, or PDF)."""
-    genai = _genai_client()
+    client = _client()
 
     if "pdf" in content_type:
-        file_ref = _upload_pdf_to_gemini(genai, content, "broker_pl.pdf")
+        file_ref = _upload_pdf(client, content, "broker_pl.pdf")
         try:
-            model = genai.GenerativeModel(
-                model_name=_MODEL,
-                generation_config={"response_mime_type": "application/json"},
+            response = client.models.generate_content(
+                model=_MODEL,
+                contents=[_BROKER_PL_PROMPT, file_ref],
+                config={"response_mime_type": "application/json"},
             )
-            response = model.generate_content([_BROKER_PL_PROMPT, file_ref])
-            data = json.loads(response.text)
+            data = _extract_json(response.text)
         finally:
-            _delete_gemini_file(genai, file_ref)
+            _delete_pdf(client, file_ref)
     else:
         if "excel" in content_type or "spreadsheet" in content_type or content_type.endswith(("xls", "xlsx")):
             text = _read_excel_as_text(content)
         else:
             text = content.decode("utf-8", errors="replace")
 
-        model = genai.GenerativeModel(
-            model_name=_MODEL,
-            generation_config={"response_mime_type": "application/json"},
+        response = client.models.generate_content(
+            model=_MODEL,
+            contents=f"{_BROKER_PL_PROMPT}\n\nDocument content:\n{text[:50_000]}",
+            config={"response_mime_type": "application/json"},
         )
-        prompt = f"{_BROKER_PL_PROMPT}\n\nDocument content:\n{text[:50_000]}"
-        response = model.generate_content(prompt)
-        data = json.loads(response.text)
+        data = _extract_json(response.text)
 
-    return BrokerPLResult(**data)
+    try:
+        return BrokerPLResult(**data)
+    except (ValidationError, TypeError) as e:
+        logger.warning(f"parse_broker_pl: Pydantic validation issue, using partial data: {e}")
+        return BrokerPLResult.model_validate(data, strict=False)
 
 
 # ── Broker Holdings Parser ────────────────────────────────────────────────────
@@ -313,34 +357,37 @@ RULES:
 
 async def parse_broker_holdings(content: bytes, content_type: str) -> BrokerHoldingsResult:
     """Parse a broker Holdings report (CSV, Excel, or PDF)."""
-    genai = _genai_client()
+    client = _client()
 
     if "pdf" in content_type:
-        file_ref = _upload_pdf_to_gemini(genai, content, "holdings.pdf")
+        file_ref = _upload_pdf(client, content, "holdings.pdf")
         try:
-            model = genai.GenerativeModel(
-                model_name=_MODEL,
-                generation_config={"response_mime_type": "application/json"},
+            response = client.models.generate_content(
+                model=_MODEL,
+                contents=[_BROKER_HOLDINGS_PROMPT, file_ref],
+                config={"response_mime_type": "application/json"},
             )
-            response = model.generate_content([_BROKER_HOLDINGS_PROMPT, file_ref])
-            data = json.loads(response.text)
+            data = _extract_json(response.text)
         finally:
-            _delete_gemini_file(genai, file_ref)
+            _delete_pdf(client, file_ref)
     else:
         if "excel" in content_type or "spreadsheet" in content_type or content_type.endswith(("xls", "xlsx")):
             text = _read_excel_as_text(content)
         else:
             text = content.decode("utf-8", errors="replace")
 
-        model = genai.GenerativeModel(
-            model_name=_MODEL,
-            generation_config={"response_mime_type": "application/json"},
+        response = client.models.generate_content(
+            model=_MODEL,
+            contents=f"{_BROKER_HOLDINGS_PROMPT}\n\nDocument content:\n{text[:50_000]}",
+            config={"response_mime_type": "application/json"},
         )
-        prompt = f"{_BROKER_HOLDINGS_PROMPT}\n\nDocument content:\n{text[:50_000]}"
-        response = model.generate_content(prompt)
-        data = json.loads(response.text)
+        data = _extract_json(response.text)
 
-    return BrokerHoldingsResult(**data)
+    try:
+        return BrokerHoldingsResult(**data)
+    except (ValidationError, TypeError) as e:
+        logger.warning(f"parse_broker_holdings: Pydantic validation issue, using partial data: {e}")
+        return BrokerHoldingsResult.model_validate(data, strict=False)
 
 
 # ── ITR Parser ────────────────────────────────────────────────────────────────
@@ -382,20 +429,24 @@ RULES:
 
 
 async def parse_itr(pdf_bytes: bytes) -> ITRResult:
-    """Parse an ITR PDF (or JSON) using Gemini File API."""
-    genai = _genai_client()
-    file_ref = _upload_pdf_to_gemini(genai, pdf_bytes, "itr.pdf")
+    """Parse an ITR PDF using Gemini File API."""
+    client = _client()
+    file_ref = _upload_pdf(client, pdf_bytes, "itr.pdf")
 
     try:
-        model = genai.GenerativeModel(
-            model_name=_MODEL,
-            generation_config={"response_mime_type": "application/json"},
+        response = client.models.generate_content(
+            model=_MODEL,
+            contents=[_ITR_PROMPT, file_ref],
+            config={"response_mime_type": "application/json"},
         )
-        response = model.generate_content([_ITR_PROMPT, file_ref])
-        data = json.loads(response.text)
-        return ITRResult(**data)
+        data = _extract_json(response.text)
+        try:
+            return ITRResult(**data)
+        except (ValidationError, TypeError) as e:
+            logger.warning(f"parse_itr: Pydantic validation issue, using partial data: {e}")
+            return ITRResult.model_validate(data, strict=False)
     finally:
-        _delete_gemini_file(genai, file_ref)
+        _delete_pdf(client, file_ref)
 
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
