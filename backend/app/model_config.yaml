@@ -40,6 +40,12 @@ risk_agent:
   temperature: 0.2
   tool_call_limit: 0
 
+# ── WhatsApp Tax Bot ─────────────────────────────────────
+# Agno agent + Gemini File API document parser
+whatsapp_bot:
+  model: "gemini-3-flash-preview"
+  temperature: 0.2
+
 # ── Voice Agent ──────────────────────────────────────────
 # OpenAI Realtime API — WebRTC voice session
 voice_agent:

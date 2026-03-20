@@ -24,7 +24,9 @@ from .models import CASResult, BrokerPLResult, BrokerHoldingsResult, ITRResult
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "gemini-2.0-flash"
+def _model_id() -> str:
+    from ..core.model_config import model_config
+    return model_config._data.get("whatsapp_bot", {}).get("model", "gemini-3-flash-preview")
 
 
 def _client():
@@ -201,7 +203,7 @@ async def parse_cas(pdf_bytes: bytes) -> CASResult:
 
     try:
         response = client.models.generate_content(
-            model=_MODEL,
+            model=_model_id(),
             contents=[_CAS_PROMPT, file_ref],
             config={"response_mime_type": "application/json"},
         )
@@ -271,7 +273,7 @@ async def parse_broker_pl(content: bytes, content_type: str) -> BrokerPLResult:
         file_ref = _upload_pdf(client, content, "broker_pl.pdf")
         try:
             response = client.models.generate_content(
-                model=_MODEL,
+                model=_model_id(),
                 contents=[_BROKER_PL_PROMPT, file_ref],
                 config={"response_mime_type": "application/json"},
             )
@@ -285,7 +287,7 @@ async def parse_broker_pl(content: bytes, content_type: str) -> BrokerPLResult:
             text = content.decode("utf-8", errors="replace")
 
         response = client.models.generate_content(
-            model=_MODEL,
+            model=_model_id(),
             contents=f"{_BROKER_PL_PROMPT}\n\nDocument content:\n{text[:50_000]}",
             config={"response_mime_type": "application/json"},
         )
@@ -363,7 +365,7 @@ async def parse_broker_holdings(content: bytes, content_type: str) -> BrokerHold
         file_ref = _upload_pdf(client, content, "holdings.pdf")
         try:
             response = client.models.generate_content(
-                model=_MODEL,
+                model=_model_id(),
                 contents=[_BROKER_HOLDINGS_PROMPT, file_ref],
                 config={"response_mime_type": "application/json"},
             )
@@ -377,7 +379,7 @@ async def parse_broker_holdings(content: bytes, content_type: str) -> BrokerHold
             text = content.decode("utf-8", errors="replace")
 
         response = client.models.generate_content(
-            model=_MODEL,
+            model=_model_id(),
             contents=f"{_BROKER_HOLDINGS_PROMPT}\n\nDocument content:\n{text[:50_000]}",
             config={"response_mime_type": "application/json"},
         )
@@ -435,7 +437,7 @@ async def parse_itr(pdf_bytes: bytes) -> ITRResult:
 
     try:
         response = client.models.generate_content(
-            model=_MODEL,
+            model=_model_id(),
             contents=[_ITR_PROMPT, file_ref],
             config={"response_mime_type": "application/json"},
         )

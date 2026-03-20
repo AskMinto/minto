@@ -17,6 +17,7 @@ from agno.agent import Agent
 from agno.models.google import Gemini
 
 from ..core.config import GEMINI_API_KEY
+from ..core.model_config import model_config
 from ..core.prompts import prompts
 from .tools import (
     delete_user_data,
@@ -50,7 +51,10 @@ def build_wa_agent() -> Agent:
         name="Minto Tax Bot",
         description=_description,
         instructions=_instructions,
-        model=Gemini(id="gemini-2.0-flash", api_key=GEMINI_API_KEY),
+        model=Gemini(
+            id=model_config._data.get("whatsapp_bot", {}).get("model", "gemini-3-flash-preview"),
+            api_key=GEMINI_API_KEY,
+        ),
         tools=[
             save_onboarding_answer,
             process_uploaded_document,
