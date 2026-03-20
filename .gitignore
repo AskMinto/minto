@@ -44,7 +44,7 @@ web-app/.env.local
 # editor/tooling
 .vscode/
 .cosine/
-
+.ruff_cache
 # Python
 __pycache__/
 *.pyc

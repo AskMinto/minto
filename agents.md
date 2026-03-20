@@ -1,5 +1,39 @@
 # Project Knowledge Base
 
+## gstack
+
+gstack is installed globally at `~/.claude/skills/gstack`.
+
+**Web browsing — always use `/browse`**: Never use built-in browser tools or web search tools directly. Always use the `$gstack-browse` skill (i.e. prefix your prompt with `$gstack-browse`) for any web browsing, URL reading, or web research tasks.
+
+**Available skills:**
+
+| Skill | Purpose |
+|---|---|
+| `/browse` | Web browsing — use this instead of browser/websearch tools |
+| `/office-hours` | Async advice and review from the team |
+| `/plan-ceo-review` | CEO review of a plan |
+| `/plan-eng-review` | Engineering review of a plan |
+| `/plan-design-review` | Design review of a plan |
+| `/design-consultation` | Design consultation |
+| `/review` | Code and implementation review |
+| `/ship` | Ship a feature end-to-end |
+| `/qa` | Full QA pass |
+| `/qa-only` | QA without implementation |
+| `/design-review` | Design review |
+| `/setup-browser-cookies` | Set up browser session cookies |
+| `/retro` | Run a retrospective |
+| `/investigate` | Investigate a bug or issue |
+| `/document-release` | Document a release |
+| `/codex` | Codex-specific workflows |
+| `/careful` | Extra-careful mode for sensitive changes |
+| `/freeze` | Freeze a file or directory from edits |
+| `/guard` | Guard mode — protect critical paths |
+| `/unfreeze` | Unfreeze a frozen file or directory |
+| `/gstack-upgrade` | Upgrade gstack to the latest version |
+
+
+
 ## 1. Project Overview
 - **Purpose**: Multi-platform app ("Minto") for portfolio tracking and conversational financial insights. Users authenticate with Supabase, import holdings (manual add, CAS PDF upload, or Zerodha import), complete financial profiling, view portfolio analytics, and chat with an AI research agent.
 - **Target users**: Retail investors managing Indian market portfolios (NSE/BSE equities + mutual funds) who want analytics, risk profiling, financial planning, and conversational help.
