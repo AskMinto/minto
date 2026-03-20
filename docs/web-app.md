@@ -1,15 +1,15 @@
 # Web App
 
-The web frontend is a **Next.js 15** app with App Router, Tailwind CSS v4, and Supabase SSR auth. It runs entirely client-side for authenticated routes, with server-side session handling via middleware.
+Next.js app with App Router, Tailwind CSS v4, and Supabase SSR auth. Authenticated routes run client-side; session management runs server-side via middleware.
 
 ## Stack
 
 | Layer | Technology |
 |---|---|
-| Framework | Next.js 15.1, React 19 |
+| Framework | Next.js + React |
 | Styling | Tailwind CSS v4, custom `@theme` design tokens |
 | Auth | @supabase/ssr (SSR + middleware session refresh) |
-| Charts | recharts 2.15 |
+| Charts | recharts |
 | Markdown | react-markdown + remark-gfm |
 | Icons | lucide-react |
 | SSE streaming | fetch ReadableStream (native browser API) |

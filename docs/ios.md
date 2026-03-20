@@ -1,21 +1,21 @@
 # iOS / Mobile App
 
-The mobile app is built with **Expo** and **React Native**, using Expo Router for file-based navigation. It targets iOS and Android from a single codebase and shares the same Supabase backend and REST API as the web app.
+Expo + React Native app using Expo Router for file-based navigation. Targets iOS and Android from a single codebase, sharing the same Supabase backend and REST API as the web app.
 
 ## Stack
 
 | Layer | Technology |
 |---|---|
-| Framework | Expo ~54, React Native 0.81, React 19 |
-| Navigation | Expo Router ~6 (file-based, tab + stack) |
-| Auth | Supabase JS ^2.97 + expo-web-browser (Google OAuth) |
-| Animation | react-native-reanimated ~4.1 |
-| Charts | react-native-svg 15.12 |
-| Markdown | react-native-markdown-display ^7.0 |
+| Framework | Expo + React Native + React |
+| Navigation | Expo Router (file-based, tab + stack) |
+| Auth | Supabase JS + expo-web-browser (Google OAuth) |
+| Animation | react-native-reanimated |
+| Charts | react-native-svg |
+| Markdown | react-native-markdown-display |
 | Fonts | DM Sans (@expo-google-fonts/dm-sans) |
-| Gradient | expo-linear-gradient ~15.0 |
-| File picker | expo-document-picker ~14.0 (CAS PDF upload) |
-| Icons | lucide-react-native ^0.575 |
+| Gradient | expo-linear-gradient |
+| File picker | expo-document-picker (CAS PDF upload) |
+| Icons | lucide-react-native |
 | Package manager | pnpm |
 
 ## Directory structure
