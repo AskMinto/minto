@@ -17,8 +17,9 @@ BLOCKED_PATTERNS = [
     r"\byou must sell\b",
     r"\bI recommend buying\b",
     r"\bI recommend selling\b",
-    r"\bbuy (?:this|it|now|today|immediately)\b",
-    r"\bsell (?:this|it|now|today|immediately)\b",
+    r"\brecommend (?:a |the )?(?:stock|fund|share|equity|investment)\b",
+    r"\bbuy (?:this|it|now|today|immediately|\w+)\b",
+    r"\bsell (?:this|it|now|today|immediately|\w+)\b",
     r"\baccumulate\b",
 ]
 
