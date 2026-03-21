@@ -46,6 +46,12 @@ whatsapp_bot:
   model: "gemini-3-flash-preview"
   temperature: 0.2
 
+# ── Web Tax Agent ─────────────────────────────────────────
+# Same tools as WhatsApp bot; markdown enabled for web chat
+tax_web_agent:
+  model: "gemini-3-flash-preview"
+  temperature: 0.2
+
 # ── Voice Agent ──────────────────────────────────────────
 # OpenAI Realtime API — WebRTC voice session
 voice_agent:
