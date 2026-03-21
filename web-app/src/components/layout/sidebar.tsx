@@ -18,6 +18,7 @@ import {
   TrendingDown,
   Menu,
   X,
+  Calculator,
 } from "lucide-react";
 
 interface MarketBadge {
@@ -26,17 +27,23 @@ interface MarketBadge {
   change: number;
 }
 
-const NAV_ITEMS = [
+const FULL_NAV_ITEMS = [
   { href: "/chat", icon: MessageCircle, label: "Chat" },
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/holdings", icon: FolderOpen, label: "Holdings" },
   { href: "/search", icon: Search, label: "Search" },
   { href: "/alerts", icon: Bell, label: "Alerts" },
+  { href: "/tax-saver", icon: Calculator, label: "Tax Saver" },
+];
+
+const NEW_USER_NAV_ITEMS = [
+  { href: "/tax-saver", icon: Calculator, label: "Tax Saver" },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { user, signOut } = useAuth();
+  const { user, signOut, userTier } = useAuth();
+  const NAV_ITEMS = userTier === "new" ? NEW_USER_NAV_ITEMS : FULL_NAV_ITEMS;
   const [badges, setBadges] = useState<MarketBadge[]>([]);
   const [mobileOpen, setMobileOpen] = useState(false);
 
