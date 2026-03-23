@@ -16,6 +16,8 @@ export async function updateSession(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
+          // Must re-create with the updated request so new cookies are included,
+          // then write the same cookies onto that response.
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options as never)
@@ -25,20 +27,27 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
+  // IMPORTANT: always call getUser() so the session is refreshed and cookies
+  // are written to supabaseResponse before we return it.
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
 
-  // Protected routes: redirect to login if not authenticated
-  if (!user && pathname.startsWith("/(app)")) {
+  // Protected app routes — the (app) route group maps to real URLs like
+  // /chat, /dashboard, /holdings, /search, /settings, /alerts, /tax-saver.
+  const isAppRoute = ["/chat", "/dashboard", "/holdings", "/search", "/settings", "/alerts", "/tax-saver"].some(
+    (p) => pathname === p || pathname.startsWith(p + "/")
+  );
+
+  if (!user && isAppRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
   }
 
-  // If on login and already authenticated, redirect to app
+  // Already authenticated — skip the login page
   if (user && pathname === "/login") {
     const url = request.nextUrl.clone();
     url.pathname = "/chat";
