@@ -15,7 +15,6 @@ type OnboardingState =
   | "needsAck"
   | "needsQuiz"
   | "needsProfile"
-  | "needsPhone"
   | "complete";
 
 interface AuthContextValue {
@@ -97,17 +96,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (!finData || finData.length === 0) {
         setOnboardingState("needsProfile");
-        return;
-      }
-
-      const { data: userData } = await supabase
-        .from("users")
-        .select("phone_number")
-        .eq("id", userId)
-        .limit(1);
-
-      if (!userData || !userData[0]?.phone_number) {
-        setOnboardingState("needsPhone");
         return;
       }
 

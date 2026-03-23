@@ -22,8 +22,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       router.replace("/onboarding/risk-quiz");
     } else if (onboardingState === "needsProfile") {
       router.replace("/onboarding/financial-profile");
-    } else if (onboardingState === "needsPhone") {
-      router.replace("/onboarding/phone");
     }
   }, [session, loading, onboardingState, router]);
 
