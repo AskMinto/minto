@@ -17,7 +17,7 @@ import logging
 import re
 from typing import Optional
 
-from pydantic import ValidationError
+# ValidationError no longer caught explicitly — model_validate(strict=False) handles partial data
 
 from ..core.config import GEMINI_API_KEY
 from .models import CASResult, BrokerPLResult, BrokerHoldingsResult, ITRResult
@@ -182,16 +182,17 @@ RULES:
 - For equity-oriented funds: is_equity_oriented=true if fund invests >65% in domestic equity.
   - equity_large_cap, equity_mid_cap, equity_small_cap, equity_flexi_cap, equity_multi_cap, elss, index, etf_equity, aggressive_hybrid → is_equity_oriented=true
   - All others → false
-- For ELSS: lock_in_expiry = purchase_date + 3 years. is_locked = lock_in_expiry > today (2025-03-20).
+- For ELSS: lock_in_expiry = purchase_date + 3 years. is_locked = lock_in_expiry > today (2025-03-23).
 - For realised gains this FY (Apr 2025 onwards): calculate from redemption/switch transactions.
   - Equity LTCG: equity fund redemption, holding period >12 months, gain positive
   - Equity STCL: equity fund redemption, holding period <=12 months, gain negative
   - etc.
 - For Section 112A grandfathering: if any lot purchased before Feb 1 2018, set grandfathering_applicable=true.
   Cost of acquisition for those lots = max(actual_cost, min(NAV_jan31_2018, sale_NAV)).
-- Section 94(7): bonus stripping — if bonus units allotted in last 9 months (before Jun 20 2025).
+- Section 94(7): bonus stripping — if bonus units allotted in last 9 months (before Jun 23 2025).
 - Section 94(8): dividend stripping — if dividend record date was within 3 months before purchase AND within 9 months before today.
 - fy_transactions: only include transactions dated Apr 1 2025 or later.
+- IMPORTANT: For any string field you cannot find in the document, use an empty string "" — never use null for string fields.
 - Return valid JSON only. No markdown fences. No commentary.
 """
 
@@ -208,11 +209,12 @@ async def parse_cas(pdf_bytes: bytes) -> CASResult:
             config={"response_mime_type": "application/json"},
         )
         data = _extract_json(response.text)
-        try:
-            return CASResult(**data)
-        except (ValidationError, TypeError) as e:
-            logger.warning(f"parse_cas: Pydantic validation issue, using partial data: {e}")
-            return CASResult.model_validate(data, strict=False)
+        # Use model_validate with strict=False so partial/null fields fall back
+        # to the model defaults rather than raising ValidationError.
+        return CASResult.model_validate(data, strict=False)
+    except Exception as e:
+        logger.error(f"parse_cas: failed: {e}")
+        raise
     finally:
         _delete_pdf(client, file_ref)
 
@@ -261,6 +263,7 @@ RULES:
 - total_ltcl/stcl: sum of absolute value of negative gain_loss for long/short term trades
 - For equity stocks and equity ETFs: LTCG if held >12 months (365 days), else STCG
 - For Gold ETFs, REITs, InvITs, non-equity ETFs: LTCG if held >12 months
+- For any string field you cannot find, use an empty string "" — never use null for string fields.
 - Return valid JSON only. No markdown. No commentary.
 """
 
@@ -293,11 +296,7 @@ async def parse_broker_pl(content: bytes, content_type: str) -> BrokerPLResult:
         )
         data = _extract_json(response.text)
 
-    try:
-        return BrokerPLResult(**data)
-    except (ValidationError, TypeError) as e:
-        logger.warning(f"parse_broker_pl: Pydantic validation issue, using partial data: {e}")
-        return BrokerPLResult.model_validate(data, strict=False)
+    return BrokerPLResult.model_validate(data, strict=False)
 
 
 # ── Broker Holdings Parser ────────────────────────────────────────────────────
@@ -348,11 +347,12 @@ Return JSON:
 }
 
 RULES:
-- Equity stocks and equity ETFs: long-term if held >12 months (365 days from buy_date to today 2025-03-20)
+- Equity stocks and equity ETFs: long-term if held >12 months (365 days from buy_date to today 2025-03-23)
 - Bonus shares: zero acquisition cost, holding period from allotment date
 - Stock splits: don't reset holding period, adjust per-share cost proportionally
 - is_long_term at position level: true only if ALL lots are >12 months
 - has_mixed_lots: true if some lots are LT and some ST
+- For any string field you cannot find, use an empty string "" — never use null for string fields.
 - Return valid JSON only. No markdown. No commentary.
 """
 
@@ -385,11 +385,7 @@ async def parse_broker_holdings(content: bytes, content_type: str) -> BrokerHold
         )
         data = _extract_json(response.text)
 
-    try:
-        return BrokerHoldingsResult(**data)
-    except (ValidationError, TypeError) as e:
-        logger.warning(f"parse_broker_holdings: Pydantic validation issue, using partial data: {e}")
-        return BrokerHoldingsResult.model_validate(data, strict=False)
+    return BrokerHoldingsResult.model_validate(data, strict=False)
 
 
 # ── ITR Parser ────────────────────────────────────────────────────────────────
@@ -426,6 +422,7 @@ RULES:
 - If no Schedule CFL section found, return schedule_cfl_found=false and empty tranches=[].
 - If ITR-1: is_itr1=true (ITR-1 cannot carry forward capital losses).
 - total_ltcl_cf and total_stcl_cf = sum of respective amounts across ALL tranches.
+- For any string field you cannot find, use an empty string "" — never use null for string fields.
 - Return valid JSON only. No markdown. No commentary.
 """
 
@@ -442,11 +439,7 @@ async def parse_itr(pdf_bytes: bytes) -> ITRResult:
             config={"response_mime_type": "application/json"},
         )
         data = _extract_json(response.text)
-        try:
-            return ITRResult(**data)
-        except (ValidationError, TypeError) as e:
-            logger.warning(f"parse_itr: Pydantic validation issue, using partial data: {e}")
-            return ITRResult.model_validate(data, strict=False)
+        return ITRResult.model_validate(data, strict=False)
     finally:
         _delete_pdf(client, file_ref)
 
