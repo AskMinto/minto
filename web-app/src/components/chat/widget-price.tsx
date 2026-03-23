@@ -13,6 +13,10 @@ import {
   Line,
   ResponsiveContainer,
   YAxis,
+  XAxis,
+  Tooltip,
+  ReferenceLine,
+  CartesianGrid,
 } from "recharts";
 
 interface PriceItem {
@@ -30,6 +34,145 @@ interface PriceItem {
 
 const MAX_VISIBLE = 3;
 
+/* ── Timeframe tabs ────────────────────────────────────────── */
+
+const PERIODS = [
+  { label: "1D", value: "1d" },
+  { label: "5D", value: "5d" },
+  { label: "1M", value: "1mo" },
+  { label: "3M", value: "3mo" },
+  { label: "6M", value: "6mo" },
+  { label: "1Y", value: "1y" },
+] as const;
+type Period = (typeof PERIODS)[number]["value"];
+
+/* ── Hover tooltip ─────────────────────────────────────────── */
+
+function ChartTooltip({
+  active,
+  payload,
+  dataKey,
+  isUp,
+}: {
+  active?: boolean;
+  payload?: { value: number; payload: { date: string } }[];
+  dataKey: string;
+  isUp: boolean;
+}) {
+  if (!active || !payload?.length) return null;
+  const point = payload[0];
+  const price = point?.value;
+  const date = point?.payload?.date;
+  const color = isUp ? "#3d8b4f" : "#c4483e";
+  return (
+    <div className="bg-white/95 border border-black/8 rounded-lg px-2.5 py-1.5 shadow-md text-[11px]">
+      <p className="font-bold" style={{ color }}>
+        {dataKey === "nav" ? `₹${price?.toFixed(4)}` : `₹${price?.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+      </p>
+      {date && <p className="text-minto-text-muted mt-0.5">{date}</p>}
+    </div>
+  );
+}
+
+/* ── Chart with timeframe selector ────────────────────────── */
+
+function PriceChart({
+  initialData,
+  dataKey,
+  isUp,
+  isMF,
+  fetchUrl,
+}: {
+  initialData: { date: string; close?: number; nav?: number }[];
+  dataKey: "close" | "nav";
+  isUp: boolean;
+  isMF: boolean;
+  fetchUrl: (period: Period) => string;
+}) {
+  const [period, setPeriod] = useState<Period>("1mo");
+  const [data, setData] = useState(initialData);
+  const [loading, setLoading] = useState(false);
+  const color = isUp ? "#3d8b4f" : "#c4483e";
+
+  const load = useCallback(async (p: Period) => {
+    if (p === "1mo") { setData(initialData); return; }
+    setLoading(true);
+    try {
+      const result = await apiGet<Record<string, unknown>>(fetchUrl(p));
+      const hist = (isMF ? result.nav_history : result.price_history) as typeof initialData | undefined;
+      if (hist?.length) setData(hist);
+    } catch {
+      // keep existing data
+    } finally {
+      setLoading(false);
+    }
+  }, [initialData, fetchUrl, isMF]);
+
+  const handlePeriod = (p: Period) => {
+    setPeriod(p);
+    load(p);
+  };
+
+  // Show fewer X-axis ticks to avoid crowding
+  const tickCount = data.length > 60 ? 4 : data.length > 20 ? 5 : data.length;
+
+  return (
+    <div className="mb-4">
+      {/* Timeframe tabs */}
+      <div className="flex items-center gap-1 mb-3">
+        {PERIODS.map((p) => (
+          <button
+            key={p.value}
+            onClick={() => handlePeriod(p.value)}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+              period === p.value
+                ? "text-white"
+                : "text-minto-text-muted hover:text-minto-text hover:bg-black/5"
+            }`}
+            style={period === p.value ? { backgroundColor: color } : {}}
+          >
+            {p.label}
+          </button>
+        ))}
+        {loading && <span className="ml-1 w-3 h-3 border border-minto-accent border-t-transparent rounded-full animate-spin inline-block" />}
+      </div>
+
+      {/* Chart */}
+      <div className="bg-white/40 rounded-xl p-3">
+        <ResponsiveContainer width="100%" height={140}>
+          <LineChart data={data} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 9, fill: "#9ca3af" }}
+              tickLine={false}
+              axisLine={false}
+              interval="preserveStartEnd"
+              tickCount={tickCount}
+            />
+            <YAxis
+              domain={["dataMin - 0.5%", "dataMax + 0.5%"]}
+              hide
+            />
+            <Tooltip
+              content={<ChartTooltip dataKey={dataKey} isUp={isUp} />}
+              cursor={{ stroke: color, strokeWidth: 1, strokeDasharray: "4 2" }}
+            />
+            <Line
+              type="monotone"
+              dataKey={dataKey}
+              stroke={color}
+              strokeWidth={2}
+              dot={false}
+              activeDot={{ r: 4, fill: color, strokeWidth: 0 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
+
 /* ── Detail Modal ──────────────────────────────────────────── */
 
 function DetailModal({ item, onClose }: { item: PriceItem; onClose: () => void }) {
@@ -38,13 +181,19 @@ function DetailModal({ item, onClose }: { item: PriceItem; onClose: () => void }
 
   const isMF = item.type === "mf";
 
+  const fetchUrl = useCallback(
+    (period: Period) =>
+      isMF
+        ? `/mf/${item.scheme_code}/detail?period=${period}`
+        : `/instruments/${item.symbol}/detail?period=${period}${item.exchange ? `&exchange=${item.exchange}` : ""}`,
+    [isMF, item]
+  );
+
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
-        const data = isMF
-          ? await apiGet<Record<string, unknown>>(`/mf/${item.scheme_code}/detail`)
-          : await apiGet<Record<string, unknown>>(`/instruments/${item.symbol}/detail`);
+        const data = await apiGet<Record<string, unknown>>(fetchUrl("1mo"));
         setDetail(data);
       } catch {
         setDetail(null);
@@ -53,7 +202,7 @@ function DetailModal({ item, onClose }: { item: PriceItem; onClose: () => void }
       }
     };
     load();
-  }, [item, isMF]);
+  }, [fetchUrl]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -65,7 +214,7 @@ function DetailModal({ item, onClose }: { item: PriceItem; onClose: () => void }
 
   const change = detail?.change as number | undefined;
   const changePct = detail?.change_pct as number | undefined;
-  const isUp = (change ?? 0) >= 0;
+  const isUp = (change ?? (item.change ?? 0)) >= 0;
   const changeColor = isUp ? "text-minto-positive" : "text-minto-negative";
   const ChangeIcon = isUp ? TrendingUp : TrendingDown;
 
@@ -79,13 +228,16 @@ function DetailModal({ item, onClose }: { item: PriceItem; onClose: () => void }
       })
     : null;
 
+  const priceHistory = detail?.price_history as { date: string; close: number }[] | undefined;
+  const navHistory = detail?.nav_history as { date: string; nav: number }[] | undefined;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/35"
       onClick={onClose}
     >
       <div
-        className="bg-[#f2f5ef] rounded-2xl shadow-xl max-h-[85vh] overflow-auto w-full max-w-lg mx-4"
+        className="bg-[#f2f5ef] rounded-2xl shadow-xl max-h-[90vh] overflow-auto w-full max-w-lg mx-4"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -104,7 +256,7 @@ function DetailModal({ item, onClose }: { item: PriceItem; onClose: () => void }
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-600 hover:bg-purple-700 transition-colors text-white text-[11px] font-semibold"
               >
                 <ExternalLink size={11} />
-                View on Yahoo Finance
+                Yahoo Finance
               </a>
             )}
             <button
@@ -124,12 +276,10 @@ function DetailModal({ item, onClose }: { item: PriceItem; onClose: () => void }
           {/* ── Equity Detail ── */}
           {!loading && detail && !isMF && (
             <>
-              <div className="flex flex-wrap items-center gap-2 mb-2">
-                <p className="text-xs text-minto-text-muted">
-                  {(detail.exchange || "") as string}
-                  {detail.sector ? ` · ${detail.sector}` : ""}
-                </p>
-              </div>
+              <p className="text-xs text-minto-text-muted mb-2">
+                {(detail.exchange || item.exchange || "") as string}
+                {detail.sector ? ` · ${detail.sector as string}` : ""}
+              </p>
               <div className="flex items-center gap-3 mb-4">
                 <span className="text-2xl font-bold text-minto-text">
                   {formatPrice(detail.price as number)}
@@ -142,16 +292,14 @@ function DetailModal({ item, onClose }: { item: PriceItem; onClose: () => void }
                 )}
               </div>
 
-              {(detail.price_history as { date: string; close: number }[] | undefined)?.length ? (
-                <Card className="mb-4 !p-3">
-                  <p className="text-[10px] text-minto-text-muted mb-2">30-day price</p>
-                  <ResponsiveContainer width="100%" height={100}>
-                    <LineChart data={detail.price_history as { close: number }[]}>
-                      <YAxis domain={["dataMin", "dataMax"]} hide />
-                      <Line type="monotone" dataKey="close" stroke={isUp ? "#3d8b4f" : "#c4483e"} strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </Card>
+              {priceHistory?.length ? (
+                <PriceChart
+                  initialData={priceHistory}
+                  dataKey="close"
+                  isUp={isUp}
+                  isMF={false}
+                  fetchUrl={fetchUrl}
+                />
               ) : null}
 
               <div className="grid grid-cols-3 gap-2 mb-4">
@@ -192,26 +340,24 @@ function DetailModal({ item, onClose }: { item: PriceItem; onClose: () => void }
                 ) : null}
               </div>
 
-              {(detail.nav_history as { nav: number }[] | undefined)?.length ? (
-                <Card className="mb-4 !p-3">
-                  <p className="text-[10px] text-minto-text-muted mb-2">30-day NAV</p>
-                  <ResponsiveContainer width="100%" height={100}>
-                    <LineChart data={detail.nav_history as { nav: number }[]}>
-                      <YAxis domain={["dataMin", "dataMax"]} hide />
-                      <Line type="monotone" dataKey="nav" stroke="#3d8b4f" strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </Card>
+              {navHistory?.length ? (
+                <PriceChart
+                  initialData={navHistory}
+                  dataKey="nav"
+                  isUp={true}
+                  isMF={true}
+                  fetchUrl={fetchUrl}
+                />
               ) : null}
 
               {detail.returns && Object.keys(detail.returns as Record<string, number>).length > 0 ? (
                 <Card className="mb-4 !p-3">
                   <div className="flex justify-around">
-                    {Object.entries(detail.returns as Record<string, number>).map(([period, val]) => {
+                    {Object.entries(detail.returns as Record<string, number>).map(([p, val]) => {
                       const pos = val >= 0;
                       return (
-                        <div key={period} className="text-center">
-                          <p className="text-[10px] text-minto-text-muted uppercase">{period}</p>
+                        <div key={p} className="text-center">
+                          <p className="text-[10px] text-minto-text-muted uppercase">{p}</p>
                           <p className={`text-sm font-bold ${pos ? "text-minto-positive" : "text-minto-negative"}`}>
                             {pos ? "+" : ""}{val.toFixed(2)}%
                           </p>

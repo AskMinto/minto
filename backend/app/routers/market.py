@@ -47,7 +47,7 @@ def price_quote(
 
 
 @router.get("/instruments/{symbol}/detail")
-def equity_detail(symbol: str, exchange: str | None = None, user: UserContext = Depends(get_user_context)):
+def equity_detail(symbol: str, exchange: str | None = None, period: str = "1mo", user: UserContext = Depends(get_user_context)):
     _ = user
     import yfinance as yf
     from ..services.yfinance_service import _to_yahoo_symbol, _strip_suffix
@@ -56,20 +56,36 @@ def equity_detail(symbol: str, exchange: str | None = None, user: UserContext = 
     if not yahoo_symbol:
         return {}
 
+    # Map frontend period tokens to yfinance (period, interval) pairs
+    _period_map = {
+        "1d":  ("1d",  "5m"),
+        "5d":  ("5d",  "15m"),
+        "1mo": ("1mo", "1d"),
+        "3mo": ("3mo", "1d"),
+        "6mo": ("6mo", "1wk"),
+        "1y":  ("1y",  "1wk"),
+    }
+    yf_period, yf_interval = _period_map.get(period, ("1mo", "1d"))
+
     try:
         ticker = yf.Ticker(yahoo_symbol)
         info = ticker.info or {}
-        hist = ticker.history(period="1mo", interval="1d")
+        hist = ticker.history(period=yf_period, interval=yf_interval)
     except Exception:
         return {}
 
     # Build price history for chart
     price_history = []
     if hist is not None and not hist.empty:
-        for date, row in hist.iterrows():
+        for ts, row in hist.iterrows():
+            # intraday periods have timezone-aware timestamps — format with time
+            if yf_interval in ("5m", "15m"):
+                label = ts.strftime("%H:%M")
+            else:
+                label = ts.strftime("%Y-%m-%d")
             price_history.append({
-                "date": date.strftime("%Y-%m-%d"),
-                "close": float(row["Close"]),
+                "date": label,
+                "close": round(float(row["Close"]), 2),
             })
 
     close_series = hist["Close"] if hist is not None and not hist.empty else None
@@ -104,7 +120,7 @@ def equity_detail(symbol: str, exchange: str | None = None, user: UserContext = 
 
 
 @router.get("/mf/{scheme_code}/detail")
-def mf_detail(scheme_code: int, user: UserContext = Depends(get_user_context)):
+def mf_detail(scheme_code: int, period: str = "1mo", user: UserContext = Depends(get_user_context)):
     _ = user
     nav_info = get_latest_nav(scheme_code)
     if not nav_info:
@@ -113,9 +129,11 @@ def mf_detail(scheme_code: int, user: UserContext = Depends(get_user_context)):
     # Get NAV history for chart and return calculations
     history = get_nav_history(scheme_code)
 
-    # 30-day history for chart
-    chart_data = history[:30] if history else []
-    # Reverse so oldest is first (MFAPI returns newest first)
+    # Map period to number of days (MFAPI returns daily NAVs, newest first)
+    _days_map = {"1d": 1, "5d": 5, "1mo": 30, "3mo": 90, "6mo": 180, "1y": 365}
+    days = _days_map.get(period, 30)
+    chart_data = history[:days] if history else []
+    # Reverse so oldest is first for the chart (left→right chronological)
     chart_data = list(reversed(chart_data))
 
     # Calculate returns from history
