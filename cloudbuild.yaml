@@ -33,21 +33,25 @@ steps:
       - '--set-env-vars'
       - >-
         SUPABASE_URL=https://yxnuoabbcxbkgjmluyez.supabase.co,
-        SUPABASE_ANON_KEY=REDACTED_SUPABASE_ANON_KEY,
         SUPABASE_JWKS_URL=https://yxnuoabbcxbkgjmluyez.supabase.co/auth/v1/keys,
-        SUPABASE_JWT_SECRET=REDACTED_SUPABASE_JWT_SECRET,
-        GEMINI_API_KEY=REDACTED_GEMINI_API_KEY,
-        MEM0_PROJECT_KEY=REDACTED_MEM0_PROJECT_KEY,
-        MEM0_API_KEY=REDACTED_MEM0_API_KEY,
         YFINANCE_MAX_RESULTS=12,
         YFINANCE_NEWS_COUNT=6,
-        KITE_API_KEY=REDACTED_KITE_API_KEY,
-        KITE_API_SECRET=REDACTED_KITE_API_SECRET,
         KITE_REDIRECT_URL=minto://zerodha-callback,
         TWILIO_WHATSAPP_FROM=whatsapp:+14155238886,
         GCS_BUCKET_NAME=minto-wa-uploads
       - '--set-secrets'
-      - 'OPENAI_API_KEY=projects/557303266732/secrets/OPENAI_API_KEY:latest,SUPABASE_SERVICE_ROLE_KEY=projects/557303266732/secrets/SUPABASE_SERVICE_ROLE_KEY:latest,TWILIO_ACCOUNT_SID=projects/557303266732/secrets/TWILIO_ACCOUNT_SID:latest,TWILIO_AUTH_TOKEN=projects/557303266732/secrets/TWILIO_AUTH_TOKEN:latest'
+      - >-
+        SUPABASE_ANON_KEY=projects/557303266732/secrets/SUPABASE_ANON_KEY:latest,
+        SUPABASE_JWT_SECRET=projects/557303266732/secrets/SUPABASE_JWT_SECRET:latest,
+        GEMINI_API_KEY=projects/557303266732/secrets/GEMINI_API_KEY:latest,
+        MEM0_PROJECT_KEY=projects/557303266732/secrets/MEM0_PROJECT_KEY:latest,
+        MEM0_API_KEY=projects/557303266732/secrets/MEM0_API_KEY:latest,
+        KITE_API_KEY=projects/557303266732/secrets/KITE_API_KEY:latest,
+        KITE_API_SECRET=projects/557303266732/secrets/KITE_API_SECRET:latest,
+        OPENAI_API_KEY=projects/557303266732/secrets/OPENAI_API_KEY:latest,
+        SUPABASE_SERVICE_ROLE_KEY=projects/557303266732/secrets/SUPABASE_SERVICE_ROLE_KEY:latest,
+        TWILIO_ACCOUNT_SID=projects/557303266732/secrets/TWILIO_ACCOUNT_SID:latest,
+        TWILIO_AUTH_TOKEN=projects/557303266732/secrets/TWILIO_AUTH_TOKEN:latest
       - --platform
       - managed
       - --allow-unauthenticated
@@ -56,9 +60,11 @@ steps:
 
   # ── Frontend ──────────────────────────────────────────────────────────────
   # NEXT_PUBLIC_* vars are baked into the JS bundle at build time via ARGs.
+  # NEXT_PUBLIC_SUPABASE_ANON_KEY is pulled from Secret Manager via secretEnv.
   - name: gcr.io/cloud-builders/docker
     id: build-web
     waitFor: ["-"]   # start immediately, in parallel with build-api
+    secretEnv: ["NEXT_PUBLIC_SUPABASE_ANON_KEY"]
     args:
       - build
       - -t
@@ -68,7 +74,7 @@ steps:
       - --build-arg
       - NEXT_PUBLIC_SUPABASE_URL=https://yxnuoabbcxbkgjmluyez.supabase.co
       - --build-arg
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY=REDACTED_SUPABASE_ANON_KEY
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=$$NEXT_PUBLIC_SUPABASE_ANON_KEY
       - --build-arg
       - NEXT_PUBLIC_API_BASE_URL=https://minto-api-557303266732.asia-south1.run.app
       - web-app
@@ -103,3 +109,7 @@ images:
   - gcr.io/$PROJECT_ID/minto-web:$COMMIT_SHA
 options:
   logging: CLOUD_LOGGING_ONLY
+availableSecrets:
+  secretManager:
+    - versionName: projects/557303266732/secrets/NEXT_PUBLIC_SUPABASE_ANON_KEY/versions/latest
+      env: NEXT_PUBLIC_SUPABASE_ANON_KEY
