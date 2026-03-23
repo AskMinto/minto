@@ -2,6 +2,7 @@ steps:
   # ── Backend ───────────────────────────────────────────────────────────────
   - name: gcr.io/cloud-builders/docker
     id: build-api
+    waitFor: ["-"]   # start immediately, in parallel with build-web
     args:
       - build
       - -t
@@ -57,6 +58,7 @@ steps:
   # NEXT_PUBLIC_* vars are baked into the JS bundle at build time via ARGs.
   - name: gcr.io/cloud-builders/docker
     id: build-web
+    waitFor: ["-"]   # start immediately, in parallel with build-api
     args:
       - build
       - -t
