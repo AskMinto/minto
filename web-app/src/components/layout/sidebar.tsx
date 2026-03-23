@@ -27,7 +27,7 @@ interface MarketBadge {
   change: number;
 }
 
-const FULL_NAV_ITEMS = [
+const NAV_ITEMS = [
   { href: "/chat", icon: MessageCircle, label: "Chat" },
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/holdings", icon: FolderOpen, label: "Holdings" },
@@ -36,14 +36,9 @@ const FULL_NAV_ITEMS = [
   { href: "/tax-saver", icon: Calculator, label: "Tax Saver" },
 ];
 
-const NEW_USER_NAV_ITEMS = [
-  { href: "/tax-saver", icon: Calculator, label: "Tax Saver" },
-];
-
 export function Sidebar() {
   const pathname = usePathname();
-  const { user, signOut, userTier } = useAuth();
-  const NAV_ITEMS = userTier === "new" ? NEW_USER_NAV_ITEMS : FULL_NAV_ITEMS;
+  const { user, signOut } = useAuth();
   const [badges, setBadges] = useState<MarketBadge[]>([]);
   const [mobileOpen, setMobileOpen] = useState(false);
 

@@ -1,15 +1,14 @@
 "use client";
 
 import { useAuth } from "@/providers/auth-provider";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Spinner } from "@/components/ui/spinner";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { session, loading, onboardingState, userTier } = useAuth();
+  const { session, loading, onboardingState } = useAuth();
   const router = useRouter();
-  const pathname = usePathname();
 
   useEffect(() => {
     if (loading) return;
@@ -17,22 +16,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       router.replace("/login");
       return;
     }
-
-    // New users who haven't verified their phone yet
-    if (onboardingState === "needsPhoneVerify") {
-      router.replace("/onboarding/verify-phone");
-      return;
-    }
-
-    // New users (phone verified, no risk_acknowledgments) — only /tax-saver
-    if (userTier === "new" && onboardingState === "complete") {
-      if (!pathname.startsWith("/tax-saver")) {
-        router.replace("/tax-saver");
-      }
-      return;
-    }
-
-    // Existing user onboarding gates (unchanged)
     if (onboardingState === "needsAck") {
       router.replace("/onboarding/risk-ack");
     } else if (onboardingState === "needsQuiz") {
@@ -42,21 +25,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     } else if (onboardingState === "needsPhone") {
       router.replace("/onboarding/phone");
     }
-  }, [session, loading, onboardingState, userTier, pathname, router]);
+  }, [session, loading, onboardingState, router]);
 
-  if (loading || !session || onboardingState === "loading") {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Spinner size={32} />
-      </div>
-    );
-  }
-
-  // While redirecting, show spinner
-  if (
-    onboardingState !== "complete" ||
-    (userTier === "new" && !pathname.startsWith("/tax-saver"))
-  ) {
+  if (loading || !session || onboardingState !== "complete") {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <Spinner size={32} />
