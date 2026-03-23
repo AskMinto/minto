@@ -35,26 +35,50 @@ def _client():
     return genai.Client(api_key=GEMINI_API_KEY)
 
 
-def _upload_pdf(client, pdf_bytes: bytes, display_name: str = "document.pdf"):
-    """Upload PDF bytes via the Gemini File API. Returns the file object."""
-    import time
-    file_ref = client.files.upload(
+async def _upload_pdf_async(client, pdf_bytes: bytes, display_name: str = "document.pdf"):
+    """Upload PDF bytes via the Gemini File API (non-blocking).
+
+    All SDK calls are synchronous network I/O, so we run them in a thread
+    pool via asyncio.to_thread to avoid blocking the FastAPI event loop.
+    Blocking the event loop is what caused the Cloud Run 502 timeouts —
+    the server became unresponsive mid-request.
+    """
+    import asyncio
+
+    # Upload runs in a thread — avoids blocking during the multipart HTTP upload
+    file_ref = await asyncio.to_thread(
+        client.files.upload,
         file=io.BytesIO(pdf_bytes),
         config={"mime_type": "application/pdf", "display_name": display_name},
     )
-    # Wait for ACTIVE state (usually <3s)
+
+    # Poll for ACTIVE state using async sleep — yields to the event loop between checks
     for _ in range(30):
-        f = client.files.get(name=file_ref.name)
+        f = await asyncio.to_thread(client.files.get, name=file_ref.name)
         if f.state.name == "ACTIVE":
             return f
-        time.sleep(1)
+        await asyncio.sleep(1)  # non-blocking — other requests can run during this wait
+
     raise RuntimeError(f"Gemini file {file_ref.name} not ACTIVE after 30s")
 
 
-def _delete_pdf(client, file_ref) -> None:
-    """Delete a Gemini File API upload immediately after parsing."""
+async def _generate_content_async(client, model_id: str, contents, config: dict) -> str:
+    """Call generate_content in a thread to avoid blocking the event loop."""
+    import asyncio
+    response = await asyncio.to_thread(
+        client.models.generate_content,
+        model=model_id,
+        contents=contents,
+        config=config,
+    )
+    return response.text
+
+
+async def _delete_pdf_async(client, file_ref) -> None:
+    """Delete a Gemini File API upload (non-blocking)."""
+    import asyncio
     try:
-        client.files.delete(name=file_ref.name)
+        await asyncio.to_thread(client.files.delete, name=file_ref.name)
     except Exception as e:
         logger.warning(f"Failed to delete Gemini file {file_ref.name}: {e}")
 
@@ -198,25 +222,23 @@ RULES:
 
 
 async def parse_cas(pdf_bytes: bytes) -> CASResult:
-    """Parse a CAS PDF using Gemini File API."""
+    """Parse a CAS PDF using Gemini File API (fully non-blocking)."""
     client = _client()
-    file_ref = _upload_pdf(client, pdf_bytes, "cas.pdf")
-
+    model_id = _model_id()
+    file_ref = await _upload_pdf_async(client, pdf_bytes, "cas.pdf")
     try:
-        response = client.models.generate_content(
-            model=_model_id(),
+        text = await _generate_content_async(
+            client, model_id,
             contents=[_CAS_PROMPT, file_ref],
             config={"response_mime_type": "application/json"},
         )
-        data = _extract_json(response.text)
-        # Use model_validate with strict=False so partial/null fields fall back
-        # to the model defaults rather than raising ValidationError.
+        data = _extract_json(text)
         return CASResult.model_validate(data, strict=False)
     except Exception as e:
         logger.error(f"parse_cas: failed: {e}")
         raise
     finally:
-        _delete_pdf(client, file_ref)
+        await _delete_pdf_async(client, file_ref)
 
 
 # ── Broker Tax P&L Parser ─────────────────────────────────────────────────────
@@ -269,33 +291,33 @@ RULES:
 
 
 async def parse_broker_pl(content: bytes, content_type: str) -> BrokerPLResult:
-    """Parse a broker Tax P&L report (CSV, Excel, or PDF)."""
+    """Parse a broker Tax P&L report (CSV, Excel, or PDF) — fully non-blocking."""
     client = _client()
+    model_id = _model_id()
 
     if "pdf" in content_type:
-        file_ref = _upload_pdf(client, content, "broker_pl.pdf")
+        file_ref = await _upload_pdf_async(client, content, "broker_pl.pdf")
         try:
-            response = client.models.generate_content(
-                model=_model_id(),
+            text = await _generate_content_async(
+                client, model_id,
                 contents=[_BROKER_PL_PROMPT, file_ref],
                 config={"response_mime_type": "application/json"},
             )
-            data = _extract_json(response.text)
         finally:
-            _delete_pdf(client, file_ref)
+            await _delete_pdf_async(client, file_ref)
     else:
         if "excel" in content_type or "spreadsheet" in content_type or content_type.endswith(("xls", "xlsx")):
-            text = _read_excel_as_text(content)
+            inline_text = _read_excel_as_text(content)
         else:
-            text = content.decode("utf-8", errors="replace")
+            inline_text = content.decode("utf-8", errors="replace")
 
-        response = client.models.generate_content(
-            model=_model_id(),
-            contents=f"{_BROKER_PL_PROMPT}\n\nDocument content:\n{text[:50_000]}",
+        text = await _generate_content_async(
+            client, model_id,
+            contents=f"{_BROKER_PL_PROMPT}\n\nDocument content:\n{inline_text[:50_000]}",
             config={"response_mime_type": "application/json"},
         )
-        data = _extract_json(response.text)
 
+    data = _extract_json(text)
     return BrokerPLResult.model_validate(data, strict=False)
 
 
@@ -358,33 +380,33 @@ RULES:
 
 
 async def parse_broker_holdings(content: bytes, content_type: str) -> BrokerHoldingsResult:
-    """Parse a broker Holdings report (CSV, Excel, or PDF)."""
+    """Parse a broker Holdings report (CSV, Excel, or PDF) — fully non-blocking."""
     client = _client()
+    model_id = _model_id()
 
     if "pdf" in content_type:
-        file_ref = _upload_pdf(client, content, "holdings.pdf")
+        file_ref = await _upload_pdf_async(client, content, "holdings.pdf")
         try:
-            response = client.models.generate_content(
-                model=_model_id(),
+            text = await _generate_content_async(
+                client, model_id,
                 contents=[_BROKER_HOLDINGS_PROMPT, file_ref],
                 config={"response_mime_type": "application/json"},
             )
-            data = _extract_json(response.text)
         finally:
-            _delete_pdf(client, file_ref)
+            await _delete_pdf_async(client, file_ref)
     else:
         if "excel" in content_type or "spreadsheet" in content_type or content_type.endswith(("xls", "xlsx")):
-            text = _read_excel_as_text(content)
+            inline_text = _read_excel_as_text(content)
         else:
-            text = content.decode("utf-8", errors="replace")
+            inline_text = content.decode("utf-8", errors="replace")
 
-        response = client.models.generate_content(
-            model=_model_id(),
-            contents=f"{_BROKER_HOLDINGS_PROMPT}\n\nDocument content:\n{text[:50_000]}",
+        text = await _generate_content_async(
+            client, model_id,
+            contents=f"{_BROKER_HOLDINGS_PROMPT}\n\nDocument content:\n{inline_text[:50_000]}",
             config={"response_mime_type": "application/json"},
         )
-        data = _extract_json(response.text)
 
+    data = _extract_json(text)
     return BrokerHoldingsResult.model_validate(data, strict=False)
 
 
@@ -428,20 +450,20 @@ RULES:
 
 
 async def parse_itr(pdf_bytes: bytes) -> ITRResult:
-    """Parse an ITR PDF using Gemini File API."""
+    """Parse an ITR PDF using Gemini File API (fully non-blocking)."""
     client = _client()
-    file_ref = _upload_pdf(client, pdf_bytes, "itr.pdf")
-
+    model_id = _model_id()
+    file_ref = await _upload_pdf_async(client, pdf_bytes, "itr.pdf")
     try:
-        response = client.models.generate_content(
-            model=_model_id(),
+        text = await _generate_content_async(
+            client, model_id,
             contents=[_ITR_PROMPT, file_ref],
             config={"response_mime_type": "application/json"},
         )
-        data = _extract_json(response.text)
+        data = _extract_json(text)
         return ITRResult.model_validate(data, strict=False)
     finally:
-        _delete_pdf(client, file_ref)
+        await _delete_pdf_async(client, file_ref)
 
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
