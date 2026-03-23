@@ -22,6 +22,7 @@ from ..agent_tools.research_tools import (
     search_instrument,
     make_profile_update_tool,
 )
+from ..services.yfinance_service import get_quote
 
 logger = logging.getLogger(__name__)
 
@@ -96,21 +97,29 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
 
         # Stock price → add to price_items with change data
         if name == "get_current_stock_price":
-            # In Agno Team streaming, tool_args is {} for member tool calls.
-            # Parse symbol and price directly from the NL result string, same
-            # pattern as get_mf_nav which reads entirely from result.
-            # e.g. "The current price of INFY.NS is ₹1,823.45 INR as of ..."
             import re as _re
+            # In Agno Team streaming mode, tool_args is {} for member tool calls.
+            # Try args first, then fall back to parsing from the result string.
+            # YFinance result format: "The current price of INFY.NS is ₹1,823.45 INR as of ..."
             symbol = args.get("symbol", "")
             price_from_result: float | None = None
 
             if isinstance(result_str, str):
-                # Extract ticker symbol: word before "is" that contains letters + optional .NS/.BO
-                sym_match = _re.search(r'\bof\s+([A-Z]{1,10}(?:\.NS|\.BO)?)\b', result_str)
-                if sym_match and not symbol:
-                    symbol = sym_match.group(1)
-                # Extract price from result string as fallback
-                price_match = _re.search(r'[\u20B9₹]\s*([\d,]+\.?\d*)', result_str)
+                if not symbol:
+                    # Try various patterns the result string might use
+                    for pat in [
+                        r'\bof\s+([A-Z]{2,10}(?:\.NS|\.BO)?)\b',
+                        r'\b([A-Z]{2,10}\.(?:NS|BO))\b',
+                        r'symbol\s*[:\s]+([A-Z]{2,10}(?:\.NS|\.BO)?)\b',
+                    ]:
+                        m = _re.search(pat, result_str)
+                        if m:
+                            symbol = m.group(1)
+                            break
+                # Extract price figure as a fallback (in case get_quote fails)
+                price_match = _re.search(r'[\u20B9₹$]\s*([\d,]+\.?\d*)', result_str)
+                if not price_match:
+                    price_match = _re.search(r'\b([\d,]+\.\d{2})\s*(?:INR|USD|Rs)', result_str)
                 if price_match:
                     try:
                         price_from_result = float(price_match.group(1).replace(",", ""))
@@ -118,15 +127,18 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
                         pass
 
             if not symbol:
+                logger.debug(f"_extract_widgets: get_current_stock_price — could not parse symbol from args={args} result={result_str[:120]!r}")
                 continue
 
+            # Strip exchange suffix to get clean display symbol
             display_symbol = symbol
             exchange = None
             for suffix in (".NS", ".BO", ".ns", ".bo"):
-                if display_symbol.endswith(suffix):
+                if display_symbol.upper().endswith(suffix.upper()):
                     exchange = "BSE" if suffix.upper() == ".BO" else "NSE"
-                    display_symbol = display_symbol[:-len(suffix)]
+                    display_symbol = display_symbol[:len(display_symbol) - len(suffix)]
                     break
+
             try:
                 quote = get_quote(symbol=display_symbol, exchange=exchange)
                 price = quote.get("price") or price_from_result
@@ -142,8 +154,18 @@ def _extract_widgets(run_output: RunOutput) -> list[dict]:
                         "change_pct": change_pct,
                         "type": "equity",
                     })
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"_extract_widgets: get_quote failed for {display_symbol}: {e}")
+                # Still emit the widget with whatever we could parse from the result string
+                if price_from_result:
+                    price_items.append({
+                        "symbol": display_symbol,
+                        "exchange": exchange,
+                        "price": price_from_result,
+                        "change": None,
+                        "change_pct": None,
+                        "type": "equity",
+                    })
 
         # MF NAV → add to price_items
         elif name == "get_mf_nav" and isinstance(result, dict) and result.get("nav"):
