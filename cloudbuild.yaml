@@ -60,11 +60,10 @@ steps:
 
   # ── Frontend ──────────────────────────────────────────────────────────────
   # NEXT_PUBLIC_* vars are baked into the JS bundle at build time via ARGs.
-  # NEXT_PUBLIC_SUPABASE_ANON_KEY is pulled from Secret Manager via secretEnv.
+  # The anon key is a public key — safe to hardcode here.
   - name: gcr.io/cloud-builders/docker
     id: build-web
     waitFor: ["-"]   # start immediately, in parallel with build-api
-    secretEnv: ["NEXT_PUBLIC_SUPABASE_ANON_KEY"]
     args:
       - build
       - -t
@@ -74,7 +73,7 @@ steps:
       - --build-arg
       - NEXT_PUBLIC_SUPABASE_URL=https://yxnuoabbcxbkgjmluyez.supabase.co
       - --build-arg
-      - NEXT_PUBLIC_SUPABASE_ANON_KEY=$$NEXT_PUBLIC_SUPABASE_ANON_KEY
+      - NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl4bnVvYWJiY3hia2dqbWx1eWV6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwMDA0NTIsImV4cCI6MjA4NzU3NjQ1Mn0.VgZfZEyPt0JUduuameIjaMgyALMt-LVQHU_na3IrRQg
       - --build-arg
       - NEXT_PUBLIC_API_BASE_URL=https://minto-api-557303266732.asia-south1.run.app
       - web-app
@@ -109,7 +108,3 @@ images:
   - gcr.io/$PROJECT_ID/minto-web:$COMMIT_SHA
 options:
   logging: CLOUD_LOGGING_ONLY
-availableSecrets:
-  secretManager:
-    - versionName: projects/557303266732/secrets/NEXT_PUBLIC_SUPABASE_ANON_KEY/versions/latest
-      env: NEXT_PUBLIC_SUPABASE_ANON_KEY
