@@ -35,7 +35,7 @@ async def send_tax_reminders() -> None:
 
         # Query wa_agent_sessions for due reminders
         # session_state is stored as JSONB; filter via Supabase PostgREST
-        result = sb.table("wa_agent_sessions").select("user_id, session_state").execute()
+        result = sb.table("wa_agent_sessions").select("wa_phone, session_state").execute()
         sessions = result.data or []
     except Exception as e:
         logger.error(f"Tax reminder job: failed to query sessions: {e}")
@@ -57,7 +57,8 @@ async def send_tax_reminders() -> None:
             if reminder_date != today_str:
                 continue
 
-            phone = session.get("user_id", "")
+            # wa_agent_sessions uses wa_phone as the primary key, not user_id
+            phone = session.get("wa_phone", "")
             if not phone:
                 continue
 
@@ -71,7 +72,7 @@ async def send_tax_reminders() -> None:
                 try:
                     sb.table("wa_agent_sessions").update({
                         "session_state": json.dumps({**ss, "reminder_opted_in": False})
-                    }).eq("user_id", phone).execute()
+                    }).eq("wa_phone", phone).execute()
                 except Exception as update_err:
                     logger.warning(f"Could not clear reminder flag for {phone}: {update_err}")
 

@@ -19,6 +19,7 @@ import {
   Menu,
   X,
   Calculator,
+  FileText,
 } from "lucide-react";
 
 interface MarketBadge {
@@ -27,20 +28,28 @@ interface MarketBadge {
   change: number;
 }
 
-const NAV_ITEMS = [
+const FULL_NAV_ITEMS = [
   { href: "/chat", icon: MessageCircle, label: "Chat" },
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/holdings", icon: FolderOpen, label: "Holdings" },
   { href: "/search", icon: Search, label: "Search" },
   { href: "/alerts", icon: Bell, label: "Alerts" },
   { href: "/tax-saver", icon: Calculator, label: "Tax Saver" },
+  { href: "/documents", icon: FileText, label: "Documents" },
+];
+
+// Limited nav for new users (no risk_ack) — only tax-saver accessible
+const NEW_USER_NAV_ITEMS = [
+  { href: "/tax-saver", icon: Calculator, label: "Tax Saver" },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
-  const { user, signOut } = useAuth();
+  const { user, signOut, userTier } = useAuth();
   const [badges, setBadges] = useState<MarketBadge[]>([]);
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const NAV_ITEMS = userTier === "new" ? NEW_USER_NAV_ITEMS : FULL_NAV_ITEMS;
 
   useEffect(() => {
     apiGet<{ market_badges: MarketBadge[] }>("/chat/home-context")
@@ -123,9 +132,11 @@ export function Sidebar() {
           <span className="flex-1 text-sm font-medium text-minto-text truncate">
             {userName}
           </span>
-          <Link href="/settings" onClick={() => setMobileOpen(false)}>
-            <Settings size={16} className="text-minto-text-muted hover:text-minto-text transition-colors" />
-          </Link>
+          {userTier !== "new" && (
+            <Link href="/settings" onClick={() => setMobileOpen(false)}>
+              <Settings size={16} className="text-minto-text-muted hover:text-minto-text transition-colors" />
+            </Link>
+          )}
           <button onClick={signOut}>
             <LogOut size={16} className="text-minto-text-muted hover:text-minto-negative transition-colors" />
           </button>

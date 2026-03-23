@@ -39,8 +39,16 @@ KITE_REDIRECT_URL = _get_env("KITE_REDIRECT_URL")
 TWILIO_ACCOUNT_SID = _get_env("TWILIO_ACCOUNT_SID")
 TWILIO_AUTH_TOKEN = _get_env("TWILIO_AUTH_TOKEN")
 TWILIO_WHATSAPP_FROM = _get_env("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
+# Public-facing HTTPS URL of this service — used for Twilio webhook signature verification
+TWILIO_WEBHOOK_URL = _get_env("TWILIO_WEBHOOK_URL")
+
 # WhatsApp Bot — GCS bucket for DPDPA-compliant raw file storage
 GCS_BUCKET_NAME = _get_env("GCS_BUCKET_NAME", "minto-wa-uploads")
+
+# Direct Postgres connection string for Agno PostgresDb (if used in future).
+# Format: postgresql+psycopg://postgres:[password]@db.[project].supabase.co:5432/postgres
+# Currently unused — session state is managed via Supabase REST (service-role client).
+SUPABASE_DB_URL = _get_env("SUPABASE_DB_URL")
 
 MFAPI_BASE_URL = _get_env("MFAPI_BASE_URL", "https://api.mfapi.in")
 
