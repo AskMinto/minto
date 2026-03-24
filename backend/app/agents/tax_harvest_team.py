@@ -17,9 +17,7 @@ The team leader uses route mode: exactly ONE specialist handles each turn.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
-from typing import AsyncGenerator
 
 from agno.agent import Agent
 from agno.models.google import Gemini
@@ -273,43 +271,31 @@ def build_tax_harvest_team(session_state: dict, messages: list[dict], user_id: s
 
 # ── Streaming runner ──────────────────────────────────────────────────────────
 
-async def run_tax_harvest_team_stream(
+async def run_tax_harvest_team(
     user_message: str,
     session_state: dict,
     messages: list[dict],
     user_id: str,
-) -> AsyncGenerator[dict, None]:
-    """Run the tax harvest team and yield SSE-compatible event dicts.
+) -> tuple[str, dict]:
+    """Run the tax harvest team synchronously and return (content, updated_session_state).
 
-    Runs the team synchronously in a thread (same pattern as web_agent.py /
-    tax_chat.py), then simulates word-by-word streaming on the result.
-    This avoids the Agno route-mode streaming duplication bug where both
-    TeamRunEvent.run_intermediate_content (member tokens) and
-    TeamRunEvent.run_content (team leader pass-through) fire for the same text.
-
-    Yields:
-        {"type": "token", "content": str}       — streaming text chunks
-        {"type": "analysis", "content": dict}  — structured analysis payload
-        {"type": "done", "content": str, "session_state": dict}
+    The caller (router event_generator) is responsible for word-by-word streaming
+    of the returned content — keeping the chunk loop inside StreamingResponse's
+    generator so Starlette flushes each chunk immediately as it is yielded.
     """
-    full_content = ""
     updated_ss = session_state.copy()
 
     def _run_sync():
         team = build_tax_harvest_team(session_state, messages, user_id)
-        result = team.run(user_message)
-        return result
+        return team.run(user_message)
 
     try:
         result = await asyncio.to_thread(_run_sync)
     except Exception as e:
-        logger.error(f"run_tax_harvest_team_stream: team run failed: {e}", exc_info=True)
-        yield {"type": "token", "content": "Something went wrong. Please try again."}
-        yield {"type": "done", "content": "Something went wrong. Please try again.", "session_state": updated_ss}
-        return
+        logger.error(f"run_tax_harvest_team: team run failed: {e}", exc_info=True)
+        return "Something went wrong. Please try again.", updated_ss
 
-    if result and result.content:
-        full_content = str(result.content)
+    full_content = str(result.content) if result and result.content else ""
 
     # Collect session state updates from all member responses
     if result and hasattr(result, "member_responses"):
@@ -317,22 +303,7 @@ async def run_tax_harvest_team_stream(
             if hasattr(mr, "session_state") and mr.session_state:
                 updated_ss.update(mr.session_state)
 
-    # Simulate word-by-word streaming (3 words per chunk) — matches web_agent.py pattern
-    if full_content:
-        words = full_content.split(" ")
-        chunk_size = 3
-        for i in range(0, len(words), chunk_size):
-            chunk = " ".join(words[i:i + chunk_size])
-            if i + chunk_size < len(words):
-                chunk += " "
-            yield {"type": "token", "content": chunk}
-            await asyncio.sleep(0)  # yield to event loop between chunks
-
-    # Emit structured analysis payload if computation completed this turn
-    if updated_ss.get("tax_analysis") and not session_state.get("tax_analysis"):
-        yield {"type": "analysis", "content": _build_analysis_payload(updated_ss)}
-
-    yield {"type": "done", "content": full_content, "session_state": updated_ss}
+    return full_content, updated_ss
 
 
 def _tool_status_message(tool_name: str) -> str:

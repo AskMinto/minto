@@ -184,42 +184,41 @@ async def tax_harvest_message_stream(
     session_state, messages = _load_harvest_session(user.user_id)
 
     async def event_generator():
-        from ..agents.tax_harvest_team import run_tax_harvest_team_stream
+        from ..agents.tax_harvest_team import run_tax_harvest_team, _build_analysis_payload
 
         full_content = ""
         updated_ss = session_state
 
         try:
-            async for event in run_tax_harvest_team_stream(
+            full_content, updated_ss = await run_tax_harvest_team(
                 user_message=body.content,
                 session_state=session_state,
                 messages=messages,
                 user_id=user.user_id,
-            ):
-                event_type = event.get("type", "token")
-                if event_type == "done":
-                    full_content = event.get("content", "")
-                    updated_ss = event.get("session_state", session_state)
-                    # Emit analysis payload if present
-                    if updated_ss.get("tax_analysis"):
-                        analysis_payload = _build_analysis_payload(updated_ss)
-                        analysis_data = json.dumps({"type": "analysis", "content": analysis_payload})
-                        yield f"data: {analysis_data}\n\n"
-                elif event_type in ("token", "status"):
-                    if event.get("content"):
-                        data = json.dumps({"type": event_type, "content": event["content"]})
-                        yield f"data: {data}\n\n"
-                elif event_type == "analysis":
-                    data = json.dumps({"type": "analysis", "content": event.get("content", {})})
-                    yield f"data: {data}\n\n"
-
+            )
         except Exception as e:
             logger.error(f"tax_harvest_message_stream: error for {user.user_id}: {e}", exc_info=True)
             full_content = "Something went wrong. Please try sending your message again."
-            data = json.dumps({"type": "token", "content": full_content})
-            yield f"data: {data}\n\n"
 
-        # Persist updated session + message history
+        # Word-by-word streaming — chunk loop lives here inside StreamingResponse's
+        # generator so Starlette flushes each SSE frame immediately as it is yielded.
+        # This matches the pattern in tax_chat.py / web_agent.py exactly.
+        if full_content:
+            words = full_content.split(" ")
+            chunk_size = 3
+            for i in range(0, len(words), chunk_size):
+                chunk = " ".join(words[i : i + chunk_size])
+                if i + chunk_size < len(words):
+                    chunk += " "
+                yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
+                await asyncio.sleep(0)
+
+        # Emit structured analysis card if computation ran this turn
+        if updated_ss.get("tax_analysis") and not session_state.get("tax_analysis"):
+            analysis_data = json.dumps({"type": "analysis", "content": _build_analysis_payload(updated_ss)})
+            yield f"data: {analysis_data}\n\n"
+
+        # Persist session + history
         if full_content:
             messages.append({"role": "user", "content": body.content})
             messages.append({"role": "assistant", "content": full_content})
