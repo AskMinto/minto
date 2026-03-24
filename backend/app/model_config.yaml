@@ -52,6 +52,14 @@ tax_web_agent:
   model: "gemini-3.1-pro-preview"
   temperature: 0.2
 
+# ── Tax Harvest Agent (Multi-Agent Team) ────────────────
+# Agno route-mode Team: OrchestratorAgent + 5 specialists
+# Specialist agents use Pro model for accuracy on Indian tax rules + document parsing
+# Orchestrator (router) uses Flash for fast deterministic routing
+tax_harvest_agent:
+  model: "gemini-3.1-pro-preview"
+  temperature: 0.2
+
 # ── Voice Agent ──────────────────────────────────────────
 # OpenAI Realtime API — WebRTC voice session
 voice_agent:

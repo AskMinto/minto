@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routers import alerts, cas, chats, dashboard, financial_profiles, holdings, market, risk, tax_chat, user, zerodha
+from .routers import alerts, cas, chats, dashboard, financial_profiles, holdings, market, risk, tax_chat, tax_harvest, user, zerodha
 from .services.alert_poller import scheduler as alert_scheduler, start_alert_scheduler, stop_alert_scheduler
 from .whatsapp_bot.reminder_scheduler import start_wa_reminder_scheduler
 
@@ -38,6 +38,7 @@ app.include_router(financial_profiles.router)
 app.include_router(alerts.router)
 app.include_router(user.router)
 app.include_router(tax_chat.router)
+app.include_router(tax_harvest.router)
 
 from .whatsapp_bot.router import router as whatsapp_router
 app.include_router(whatsapp_router, prefix="/whatsapp", tags=["whatsapp"])
