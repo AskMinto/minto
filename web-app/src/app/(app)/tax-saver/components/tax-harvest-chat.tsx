@@ -9,6 +9,7 @@ import { useTaxHarvest } from "@/hooks/use-tax-harvest";
 import type { TaxHarvestMessage, AnalysisPayload } from "@/hooks/use-tax-harvest";
 import { TaxAnalysisCard } from "./tax-analysis-card";
 import { DocumentUploadButton } from "./document-upload-button";
+import { WidgetIntake } from "./widget-intake";
 
 export function TaxHarvestChat() {
   const {
@@ -80,11 +81,19 @@ export function TaxHarvestChat() {
             const isLast = i === messages.length - 1;
             const isStreamingEmpty = msg.role === "assistant" && !msg.content && sending && isLast;
             return (
-              <MessageBubble
-                key={i}
-                message={msg}
-                isStreaming={isStreamingEmpty}
-              />
+              <div key={i}>
+                <MessageBubble
+                  message={msg}
+                  isStreaming={isStreamingEmpty}
+                />
+                {msg.role === "assistant" && msg.intakeWidget && isLast && !sending && (
+                  <WidgetIntake
+                    widget={msg.intakeWidget}
+                    onSubmit={(answer) => sendMessage(answer)}
+                    disabled={sending}
+                  />
+                )}
+              </div>
             );
           })}
           <div ref={bottomRef} />

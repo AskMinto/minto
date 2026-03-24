@@ -6,10 +6,18 @@ import { apiStream } from "@/lib/api-stream";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+export interface IntakeWidget {
+  field: string;
+  question: string;
+  options: { label: string; value: string }[];
+  multi: boolean;
+}
+
 export interface TaxHarvestMessage {
   role: "user" | "assistant" | "status";
   content: string;
   analysisPayload?: AnalysisPayload;
+  intakeWidget?: IntakeWidget;
 }
 
 export interface SessionState {
@@ -180,6 +188,17 @@ export function useTaxHarvest() {
             } else if (event.type === "done") {
               const ss = event.session_state as SessionState | undefined;
               if (ss) setSessionState(ss);
+              const widget = (event as unknown as Record<string, unknown>).intake_widget as IntakeWidget | undefined;
+              if (widget) {
+                setMessages((prev) => {
+                  const copy = [...prev];
+                  const last = copy.length - 1;
+                  if (last >= 0 && copy[last].role === "assistant") {
+                    copy[last] = { ...copy[last], intakeWidget: widget };
+                  }
+                  return copy;
+                });
+              }
             }
           }
         );

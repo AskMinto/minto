@@ -228,6 +228,7 @@ async def tax_harvest_message_stream(
         done_data = json.dumps({
             "type": "done",
             "session_state": _safe_session_summary(updated_ss),
+            "intake_widget": _detect_intake_widget(updated_ss, full_content),
         })
         yield f"data: {done_data}\n\n"
 
@@ -467,6 +468,101 @@ def delete_document(
 
 
 # ── Analysis payload builder ───────────────────────────────────────────────────
+
+def _detect_intake_widget(ss: dict, response_text: str) -> dict | None:
+    """Detect which intake question was just asked and return a widget config.
+
+    Looks at what intake fields are still missing and what keywords appear in
+    the agent's response. Returns a widget dict the frontend renders as
+    clickable option chips below the message bubble.
+
+    Returns None if intake is complete or no recognisable question was asked.
+    """
+    text = response_text.lower()
+
+    # Intake complete — no widget needed
+    intake_fields = ["income_slab", "tax_regime", "resident_status", "brokers", "has_fno", "has_mf_outside_demat"]
+    all_done = all(ss.get(f) is not None for f in intake_fields)
+    if all_done:
+        return None
+
+    # Detect which question is being asked by keywords in the response
+    if ss.get("resident_status") is None and any(w in text for w in ["resident", "nri", "residential status"]):
+        return {
+            "field": "resident_status",
+            "question": "Your residential status",
+            "options": [
+                {"label": "Resident Indian", "value": "resident"},
+                {"label": "NRI", "value": "nri"},
+            ],
+            "multi": False,
+        }
+
+    if ss.get("income_slab") is None and any(w in text for w in ["income", "slab", "bracket", "salary", "earning"]):
+        return {
+            "field": "income_slab",
+            "question": "Your annual income",
+            "options": [
+                {"label": "< ₹5L", "value": "<5L"},
+                {"label": "₹5–10L", "value": "5-10L"},
+                {"label": "₹10–15L", "value": "10-15L"},
+                {"label": "₹15–30L", "value": "15-30L"},
+                {"label": "> ₹30L", "value": ">30L"},
+            ],
+            "multi": False,
+        }
+
+    if ss.get("tax_regime") is None and any(w in text for w in ["regime", "old regime", "new regime"]):
+        return {
+            "field": "tax_regime",
+            "question": "Your tax regime",
+            "options": [
+                {"label": "New Regime", "value": "new"},
+                {"label": "Old Regime", "value": "old"},
+            ],
+            "multi": False,
+        }
+
+    if ss.get("brokers") in (None, [], "") and any(w in text for w in ["broker", "zerodha", "groww", "upstox", "platform", "trade"]):
+        return {
+            "field": "brokers",
+            "question": "Which brokers do you use?",
+            "options": [
+                {"label": "Zerodha", "value": "Zerodha"},
+                {"label": "Groww", "value": "Groww"},
+                {"label": "Upstox", "value": "Upstox"},
+                {"label": "Angel One", "value": "Angel One"},
+                {"label": "ICICI Direct", "value": "ICICI Direct"},
+                {"label": "HDFC Securities", "value": "HDFC Securities"},
+                {"label": "Other", "value": "Other"},
+            ],
+            "multi": True,
+        }
+
+    if ss.get("has_fno") is None and any(w in text for w in ["f&o", "fno", "futures", "options", "derivatives"]):
+        return {
+            "field": "has_fno",
+            "question": "Do you trade F&O?",
+            "options": [
+                {"label": "Yes", "value": "true"},
+                {"label": "No", "value": "false"},
+            ],
+            "multi": False,
+        }
+
+    if ss.get("has_mf_outside_demat") is None and any(w in text for w in ["cams", "kfintech", "mfcentral", "outside demat", "mutual fund", "folio"]):
+        return {
+            "field": "has_mf_outside_demat",
+            "question": "Do you hold mutual funds via CAMS/KFintech?",
+            "options": [
+                {"label": "Yes", "value": "true"},
+                {"label": "No", "value": "false"},
+            ],
+            "multi": False,
+        }
+
+    return None
+
 
 def _build_analysis_payload(ss: dict) -> dict:
     """Build the structured AnalysisPayload for the frontend dashboard card."""
