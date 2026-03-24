@@ -31,12 +31,17 @@ from .tax_harvest_tools import make_tax_harvest_tools
 
 logger = logging.getLogger(__name__)
 
-# ── Model helper ──────────────────────────────────────────────────────────────
+# ── Model helpers ─────────────────────────────────────────────────────────────
 
 def _pro_model(temperature: float = 0.2) -> Gemini:
-    """gemini-3.1-pro-preview — used for ALL agents including the team router."""
-    cfg = model_config._data.get("tax_harvest_agent", {})
-    model_id = cfg.get("model", "gemini-3.1-pro-preview")
+    """gemini-3.1-pro-preview — all five specialist agents."""
+    model_id = model_config._data.get("tax_harvest_agent", {}).get("model", "gemini-3.1-pro-preview")
+    return Gemini(id=model_id, api_key=GEMINI_API_KEY, temperature=temperature)
+
+
+def _flash_model(temperature: float = 0.1) -> Gemini:
+    """gemini-3-flash-preview — orchestrator/router only (routing decisions)."""
+    model_id = model_config._data.get("tax_harvest_orchestrator", {}).get("model", "gemini-3-flash-preview")
     return Gemini(id=model_id, api_key=GEMINI_API_KEY, temperature=temperature)
 
 
@@ -258,7 +263,7 @@ def build_tax_harvest_team(session_state: dict, messages: list[dict], user_id: s
     return Team(
         name="TaxHarvestOrchestrator",
         mode=TeamMode.route,
-        model=_pro_model(temperature=0.1),
+        model=_flash_model(temperature=0.1),
         members=[intake, doc_router, normalisation, tax_comp, harvesting],
         instructions=router_instructions,
         additional_context=history_context or None,

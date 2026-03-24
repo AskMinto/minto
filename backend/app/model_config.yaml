@@ -53,11 +53,18 @@ tax_web_agent:
   temperature: 0.2
 
 # ── Tax Harvest Agent (Multi-Agent Team) ────────────────
-# Agno route-mode Team: OrchestratorAgent + 5 specialists
-# ALL agents (including the team router/orchestrator) use gemini-3.1-pro-preview
+# 5 specialist agents: IntakeAgent, DocumentRouterAgent, NormalisationAgent,
+# TaxComputationAgent, HarvestingAgent
 tax_harvest_agent:
   model: "gemini-3.1-pro-preview"
   temperature: 0.2
+
+# ── Tax Harvest Orchestrator ──────────────────────────────
+# Route-mode Team leader — classifies and routes to one specialist per turn.
+# Uses Flash for speed; routing is simple classification, not heavy reasoning.
+tax_harvest_orchestrator:
+  model: "gemini-3-flash-preview"
+  temperature: 0.1
 
 # ── Voice Agent ──────────────────────────────────────────
 # OpenAI Realtime API — WebRTC voice session
