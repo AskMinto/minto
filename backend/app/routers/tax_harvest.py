@@ -231,6 +231,9 @@ async def tax_harvest_message_stream(
             logger.error(f"tax_harvest_message_stream: error for {user.user_id}: {e}", exc_info=True)
             full_content = "Something went wrong. Please try sending your message again."
 
+        # Status event so the user sees something while the LLM thinks
+        yield f"data: {json.dumps({'type': 'status', 'content': '⏳ Thinking...'})}\n\n"
+
         # Word-by-word streaming — chunk loop lives here inside StreamingResponse's
         # generator so Starlette flushes each SSE frame immediately as it is yielded.
         # This matches the pattern in tax_chat.py / web_agent.py exactly.
@@ -246,6 +249,7 @@ async def tax_harvest_message_stream(
 
         # Emit structured analysis card if computation ran this turn
         if updated_ss.get("tax_analysis") and not session_state.get("tax_analysis"):
+            from ..agents.tax_harvest_team import _build_analysis_payload
             analysis_data = json.dumps({"type": "analysis", "content": _build_analysis_payload(updated_ss)})
             yield f"data: {analysis_data}\n\n"
 
@@ -300,22 +304,12 @@ async def tax_harvest_upload(
     content_type = file.content_type or "application/octet-stream"
     filename = file.filename or f"{doc_type}_upload"
     is_pdf = "pdf" in content_type.lower() or filename.lower().endswith(".pdf")
+    is_xlsx = filename.lower().endswith((".xlsx", ".xls", ".xlsm"))
 
     # Handle encrypted PDFs
     if is_pdf:
         if is_pdf_encrypted(raw_bytes):
             if not password:
-                # Store pending upload in session so agent can retry with password
-                loop = asyncio.get_running_loop()
-                ss, msgs = await loop.run_in_executor(None, _load_harvest_session, user.user_id)
-                ss["pending_upload"] = {
-                    "raw_bytes": base64.b64encode(raw_bytes).decode(),
-                    "content_type": content_type,
-                    "filename": filename,
-                    "doc_type": doc_type,
-                    "broker_name": broker_name,
-                }
-                await loop.run_in_executor(None, save_tax_session, user.user_id, ss, msgs)
                 return {
                     "status": "needs_password",
                     "filename": filename,
@@ -331,6 +325,28 @@ async def tax_harvest_upload(
                     "status": "wrong_password",
                     "filename": filename,
                     "message": "Incorrect password. Please try your PAN or date of birth.",
+                }
+
+    # Handle encrypted XLSXs (e.g. password-protected Zerodha exports)
+    if is_xlsx:
+        from ..whatsapp_bot.llm_doc_parser import is_xlsx_encrypted, _decrypt_xlsx
+        if is_xlsx_encrypted(raw_bytes):
+            if not password:
+                return {
+                    "status": "needs_password",
+                    "filename": filename,
+                    "message": (
+                        f"The file **{filename}** is password-protected. "
+                        "Please enter the password to unlock it."
+                    ),
+                }
+            try:
+                raw_bytes = _decrypt_xlsx(raw_bytes, password)
+            except ValueError:
+                return {
+                    "status": "wrong_password",
+                    "filename": filename,
+                    "message": "Incorrect password. Please try again.",
                 }
 
     # Parse the document
@@ -567,12 +583,21 @@ def _detect_intake_widget(ss: dict, response_text: str) -> dict | None:
         },
     ]
 
+    _QUESTIONS = {
+        "income_slab":           "What's your approximate annual income?",
+        "tax_regime":            "Which tax regime are you filing under?",
+        "resident_status":       "What's your residential status for tax purposes?",
+        "brokers":               "Which brokers or platforms do you invest through?",
+        "has_fno":               "Do you trade in F&O (futures & options)?",
+        "has_mf_outside_demat":  "Do you hold mutual funds via CAMS or KFintech (outside a demat account)?",
+    }
+
     for w in _WIDGETS:
         field = w["field"]
         val = ss.get(field)
         # Field missing: empty string, None, or empty list
         if val is None or val == "" or val == []:
-            return w
+            return {**w, "question": _QUESTIONS.get(field, "")}
 
     return None
 

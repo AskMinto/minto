@@ -271,7 +271,7 @@ def make_tax_harvest_tools(session_state: dict, user_id: str):
         """Run the full capital gains tax computation using all uploaded documents.
 
         Computes LTCG/STCG/LTCL/STCL netting per Sections 70/71/72/112A/87A.
-        Also computes loss harvesting candidates and gains harvesting candidates.
+        Also computes loss harvesting, gains harvesting, UPGRADE_TERM, and AVOID_SELL candidates.
 
         Call this when all required documents are uploaded (check session_state.documents_done
         vs session_state.documents_needed).
@@ -281,6 +281,7 @@ def make_tax_harvest_tools(session_state: dict, user_id: str):
             get_loss_harvest_candidates_mf,
             get_loss_harvest_candidates_stocks,
             get_gains_harvest_candidates_mf,
+            get_upgrade_term_candidates,
         )
 
         # Verify at least one document is parsed
@@ -306,13 +307,15 @@ def make_tax_harvest_tools(session_state: dict, user_id: str):
             loss_mf = get_loss_harvest_candidates_mf(session_state)
             loss_stocks = get_loss_harvest_candidates_stocks(session_state)
             gains_mf = get_gains_harvest_candidates_mf(remaining_exemption, session_state)
+            term_actions = get_upgrade_term_candidates(session_state)
         except Exception as e:
             logger.warning(f"run_tax_computation: harvesting plans failed: {e}")
-            loss_mf, loss_stocks, gains_mf = [], [], []
+            loss_mf, loss_stocks, gains_mf, term_actions = [], [], [], []
 
         session_state["loss_harvest_mf"] = loss_mf
         session_state["loss_harvest_stocks"] = loss_stocks
         session_state["gains_harvest_mf"] = gains_mf
+        session_state["term_actions"] = term_actions
         session_state["step"] = "analysis"
 
         return json.dumps({
@@ -326,6 +329,7 @@ def make_tax_harvest_tools(session_state: dict, user_id: str):
             "loss_harvest_mf_count": len(loss_mf),
             "loss_harvest_stocks_count": len(loss_stocks),
             "gains_harvest_mf_count": len(gains_mf),
+            "term_actions_count": len(term_actions),
         })
 
     def get_loss_harvest_plan() -> str:

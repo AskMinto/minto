@@ -116,6 +116,36 @@ def _extract_json(text: str) -> dict:
     raise ValueError(f"Could not extract valid JSON from model response: {text[:200]}")
 
 
+def _decrypt_xlsx(excel_bytes: bytes, password: str) -> bytes:
+    """Decrypt a password-protected XLSX using msoffcrypto-tool.
+
+    Raises ValueError with 'INCORRECT_PASSWORD' if the password is wrong.
+    """
+    try:
+        import msoffcrypto
+        encrypted = io.BytesIO(excel_bytes)
+        decrypted = io.BytesIO()
+        office_file = msoffcrypto.OfficeFile(encrypted)
+        office_file.load_key(password=password)
+        office_file.decrypt(decrypted)
+        return decrypted.getvalue()
+    except Exception as e:
+        if "password" in str(e).lower() or "key" in str(e).lower():
+            raise ValueError("INCORRECT_PASSWORD") from e
+        raise
+
+
+def is_xlsx_encrypted(excel_bytes: bytes) -> bool:
+    """Return True if the XLSX file is password-protected."""
+    try:
+        import msoffcrypto
+        f = io.BytesIO(excel_bytes)
+        office_file = msoffcrypto.OfficeFile(f)
+        return office_file.is_encrypted()
+    except Exception:
+        return False
+
+
 def _read_excel_as_text(excel_bytes: bytes) -> str:
     """Convert Excel bytes to CSV-like text for inline LLM parsing."""
     import openpyxl

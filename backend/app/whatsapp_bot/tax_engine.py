@@ -568,6 +568,97 @@ def get_gains_harvest_candidates_mf(remaining_exemption: float, session_state: d
     return candidates
 
 
+def get_upgrade_term_candidates(session_state: dict, days_threshold: int = 45) -> list[dict]:
+    """Return positions close to crossing a tax-advantageous holding period threshold.
+
+    UPGRADE_TERM: positions that would become LTCG-eligible within `days_threshold` days.
+    AVOID_SELL:   positions where selling now would be suboptimal (e.g. FOF < 24 months,
+                  or stock close to but not yet at 12-month LTCG threshold).
+
+    Returns a list of action dicts with action_type, instrument_name, days_to_threshold,
+    current_gain_loss, tax_implication, and rationale.
+    """
+    from datetime import date as _date
+
+    today = _today()
+    actions = []
+
+    # ── Equity MF folios close to LTCG threshold ─────────────────────────────
+    cas = session_state.get("cas_parsed") or {}
+    for folio in (cas.get("folios") or []):
+        if not folio.get("is_equity_oriented", False):
+            continue
+        if folio.get("is_elss") and folio.get("is_locked"):
+            continue
+
+        holding_days = _estimate_holding_days(folio)
+        unrealised = float(folio.get("unrealised_gain") or 0)
+
+        # UPGRADE_TERM: within threshold days of becoming LTCG-eligible
+        if 365 - days_threshold <= holding_days < 365 and unrealised > 0:
+            days_to_lt = 365 - holding_days
+            stcg_tax = unrealised * EQUITY_STCG_RATE
+            ltcg_tax = max(0, unrealised - LTCG_EXEMPTION) * EQUITY_LTCG_RATE
+            tax_saving = stcg_tax - ltcg_tax
+            actions.append({
+                "action_type": "UPGRADE_TERM",
+                "instrument_name": folio.get("fund_name", "Unknown Fund"),
+                "instrument_type": "equity_mf",
+                "days_to_threshold": days_to_lt,
+                "threshold_label": "LTCG eligibility (12 months)",
+                "current_gain_loss": unrealised,
+                "tax_implication": f"Selling now → STCG @ 20% (₹{stcg_tax:,.0f}). Wait {days_to_lt}d → LTCG @ 12.5% (₹{ltcg_tax:,.0f}).",
+                "tax_saving_if_wait": tax_saving,
+                "rationale": f"Wait {days_to_lt} more days to qualify for the 12.5% LTCG rate instead of 20% STCG.",
+                "priority": "HIGH" if tax_saving > 5000 else "MEDIUM",
+            })
+
+    # ── Stock positions close to LTCG threshold ───────────────────────────────
+    holdings = session_state.get("broker_holdings_parsed") or {}
+    for pos in (holdings.get("holdings") or []):
+        holding_days = _estimate_stock_holding_days(pos)
+        unrealised = float(pos.get("unrealised_gain") or 0)
+
+        # UPGRADE_TERM: within threshold days of 12-month LTCG for stocks
+        if 365 - days_threshold <= holding_days < 365 and unrealised > 0:
+            days_to_lt = 365 - holding_days
+            stcg_tax = unrealised * EQUITY_STCG_RATE
+            ltcg_tax = max(0, unrealised - LTCG_EXEMPTION) * EQUITY_LTCG_RATE
+            tax_saving = stcg_tax - ltcg_tax
+            actions.append({
+                "action_type": "UPGRADE_TERM",
+                "instrument_name": pos.get("scrip_name", "Unknown Stock"),
+                "instrument_type": "stock",
+                "days_to_threshold": days_to_lt,
+                "threshold_label": "LTCG eligibility (12 months)",
+                "current_gain_loss": unrealised,
+                "tax_implication": f"Selling now → STCG @ 20% (₹{stcg_tax:,.0f}). Wait {days_to_lt}d → LTCG @ 12.5% (₹{ltcg_tax:,.0f}).",
+                "tax_saving_if_wait": tax_saving,
+                "rationale": f"Wait {days_to_lt} more days for LTCG eligibility and save ₹{tax_saving:,.0f} in tax.",
+                "priority": "HIGH" if tax_saving > 5000 else "MEDIUM",
+            })
+
+        # AVOID_SELL: position in profit but not yet LTCG-eligible (< 335 days)
+        elif holding_days < 365 - days_threshold and unrealised > 5000:
+            stcg_tax = unrealised * EQUITY_STCG_RATE
+            days_to_lt = 365 - holding_days
+            actions.append({
+                "action_type": "AVOID_SELL",
+                "instrument_name": pos.get("scrip_name", "Unknown Stock"),
+                "instrument_type": "stock",
+                "days_to_threshold": days_to_lt,
+                "threshold_label": "LTCG eligibility (12 months)",
+                "current_gain_loss": unrealised,
+                "tax_implication": f"Selling now → STCG @ 20% (₹{stcg_tax:,.0f}). Hold {days_to_lt} more days → 12.5% LTCG.",
+                "tax_saving_if_wait": stcg_tax - max(0, unrealised - LTCG_EXEMPTION) * EQUITY_LTCG_RATE,
+                "rationale": f"{days_to_lt} days until LTCG eligibility — consider holding unless urgent.",
+                "priority": "LOW",
+            })
+
+    actions.sort(key=lambda x: -x.get("tax_saving_if_wait", 0))
+    return actions
+
+
 def compute_cf_strategy(tax_analysis: dict) -> dict:
     """Explain CF allocation rationale and compute tax saved vs naive allocation.
 

@@ -39,6 +39,32 @@ export interface SessionState {
   exemption_remaining?: number | null;
 }
 
+export interface TermAction {
+  action_type: "UPGRADE_TERM" | "AVOID_SELL";
+  instrument_name: string;
+  instrument_type: string;
+  days_to_threshold: number;
+  threshold_label: string;
+  current_gain_loss: number;
+  tax_implication: string;
+  tax_saving_if_wait: number;
+  rationale: string;
+  priority: "HIGH" | "MEDIUM" | "LOW";
+}
+
+export interface OpenPosition {
+  scrip_name?: string;
+  isin?: string;
+  symbol?: string;
+  total_quantity?: number;
+  current_value?: number;
+  total_invested?: number;
+  unrealised_gain?: number;
+  is_long_term?: boolean;
+  has_mixed_lots?: boolean;
+  asset_class?: string;
+}
+
 export interface AnalysisPayload {
   tax_year: string;
   income_slab: string | null;
@@ -53,6 +79,8 @@ export interface AnalysisPayload {
   loss_harvest_mf?: LossCandidate[];
   loss_harvest_stocks?: LossCandidate[];
   gains_harvest_mf?: GainsCandidate[];
+  term_actions?: TermAction[];
+  open_positions?: OpenPosition[];
   warnings?: string[];
   cf_ltcl_remaining?: number | null;
   cf_stcl_remaining?: number | null;

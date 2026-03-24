@@ -1,7 +1,7 @@
 "use client";
 
-import { TrendingDown, TrendingUp, Shield, AlertTriangle, CheckCircle, Info } from "lucide-react";
-import type { AnalysisPayload, LossCandidate, GainsCandidate } from "@/hooks/use-tax-harvest";
+import { TrendingDown, TrendingUp, Shield, AlertTriangle, CheckCircle, Info, Clock, Ban } from "lucide-react";
+import type { AnalysisPayload, LossCandidate, GainsCandidate, TermAction } from "@/hooks/use-tax-harvest";
 
 interface Props {
   payload: AnalysisPayload;
@@ -49,6 +49,7 @@ export function TaxAnalysisCard({ payload }: Props) {
     ...(payload.loss_harvest_mf || []),
     ...(payload.loss_harvest_stocks || []),
   ].filter((l) => !l.excluded);
+  const termActions = payload.term_actions || [];
   const gainsHarvestable = payload.gains_harvest_mf || [];
   const warnings = payload.warnings || [];
 
@@ -192,6 +193,22 @@ export function TaxAnalysisCard({ payload }: Props) {
         </div>
       )}
 
+      {/* UPGRADE_TERM / AVOID_SELL actions */}
+      {termActions.length > 0 && (
+        <div className="glass-card rounded-2xl p-5 space-y-3 border border-amber-200/40">
+          <div className="flex items-center gap-2">
+            <Clock size={16} className="text-amber-600" />
+            <h3 className="font-semibold text-minto-text text-base">Hold or Wait Actions</h3>
+          </div>
+          <p className="text-xs text-minto-text-muted">
+            These positions are close to crossing a tax threshold — consider waiting before selling.
+          </p>
+          <div className="space-y-2">
+            {termActions.map((a, i) => <TermActionRow key={i} action={a} />)}
+          </div>
+        </div>
+      )}
+
       {/* ITR reminder */}
       <div className="glass-subtle rounded-xl p-3.5 flex items-start gap-2.5">
         <CheckCircle size={15} className="text-minto-accent shrink-0 mt-0.5" />
@@ -200,6 +217,39 @@ export function TaxAnalysisCard({ payload }: Props) {
           before <strong>July 31, 2026</strong> to carry forward capital losses to FY 2026-27.
         </div>
       </div>
+    </div>
+  );
+}
+
+function TermActionRow({ action }: { action: TermAction }) {
+  const isUpgrade = action.action_type === "UPGRADE_TERM";
+  const Icon = isUpgrade ? Clock : Ban;
+  const borderColor = isUpgrade ? "border-amber-200/60" : "border-gray-200/60";
+  const iconColor = isUpgrade ? "text-amber-600" : "text-gray-500";
+  const badgeBg = isUpgrade ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600";
+
+  return (
+    <div className={`flex items-start justify-between bg-white/50 rounded-xl px-4 py-3 gap-4 border ${borderColor}`}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Icon size={13} className={iconColor} />
+          <span className="text-sm font-medium text-minto-text truncate">{action.instrument_name}</span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${badgeBg}`}>
+            {isUpgrade ? "UPGRADE TERM" : "AVOID SELL"}
+          </span>
+          <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+            action.priority === "HIGH" ? "bg-red-100 text-red-700" : action.priority === "MEDIUM" ? "bg-amber-100 text-amber-700" : "bg-gray-100 text-gray-600"
+          }`}>{action.priority}</span>
+        </div>
+        <p className="text-xs text-minto-text-muted mt-1">{action.rationale}</p>
+        <p className="text-xs text-minto-accent mt-0.5">{action.days_to_threshold} days to {action.threshold_label}</p>
+      </div>
+      {action.tax_saving_if_wait > 0 && (
+        <div className="text-right shrink-0">
+          <div className="text-xs text-minto-text-muted">Save if wait</div>
+          <div className="text-sm font-semibold text-green-700">{formatINR(action.tax_saving_if_wait)}</div>
+        </div>
+      )}
     </div>
   );
 }

@@ -6,10 +6,11 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ArrowUp, RotateCcw } from "lucide-react";
 import { useTaxHarvest } from "@/hooks/use-tax-harvest";
-import type { TaxHarvestMessage, AnalysisPayload } from "@/hooks/use-tax-harvest";
+import type { TaxHarvestMessage, AnalysisPayload, UploadResult } from "@/hooks/use-tax-harvest";
 import { TaxAnalysisCard } from "./tax-analysis-card";
 import { DocumentUploadButton } from "./document-upload-button";
 import { WidgetIntake } from "./widget-intake";
+import { PasswordPrompt } from "./password-prompt";
 
 export function TaxHarvestChat() {
   const {
@@ -24,6 +25,9 @@ export function TaxHarvestChat() {
   } = useTaxHarvest();
 
   const [input, setInput] = useState("");
+  const [pendingPassword, setPendingPassword] = useState<UploadResult | null>(null);
+  const [pendingFile, setPendingFile] = useState<{ file: File; docType: string; brokerName?: string } | null>(null);
+  const [passwordError, setPasswordError] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const inputAreaRef = useRef<HTMLDivElement>(null);
@@ -86,7 +90,7 @@ export function TaxHarvestChat() {
                   message={msg}
                   isStreaming={isStreamingEmpty}
                 />
-                {msg.role === "assistant" && msg.intakeWidget && isLast && !sending && (
+                {msg.role === "assistant" && msg.intakeWidget && isLast && !sending && !pendingPassword && (
                   <WidgetIntake
                     widget={msg.intakeWidget}
                     onSubmit={(answer) => sendMessage(answer)}
@@ -96,6 +100,29 @@ export function TaxHarvestChat() {
               </div>
             );
           })}
+          {/* Inline password prompt rendered in the chat stream */}
+          {pendingPassword && pendingFile && (
+            <div className="flex gap-3 mb-6">
+              <div className="shrink-0 w-8 h-8 rounded-full glass-card flex items-center justify-center mt-1">
+                <Image src="/minto.png" alt="Minto" width={20} height={20} />
+              </div>
+              <PasswordPrompt
+                filename={pendingPassword.filename || pendingFile.file.name}
+                isLoading={uploading}
+                error={passwordError}
+                onSubmit={async (pwd) => {
+                  setPasswordError("");
+                  const result = await uploadDocument(pendingFile.file, pendingFile.docType, pendingFile.brokerName, pwd);
+                  if (result.status === "wrong_password") {
+                    setPasswordError(result.message || "Incorrect password. Please try again.");
+                  } else if (result.status === "parsed") {
+                    setPendingPassword(null);
+                    setPendingFile(null);
+                  }
+                }}
+              />
+            </div>
+          )}
           <div ref={bottomRef} />
         </div>
       </div>
@@ -105,7 +132,14 @@ export function TaxHarvestChat() {
         <div className="max-w-3xl mx-auto relative">
           <div className="flex items-end gap-3 bg-white/85 border border-white/70 rounded-[1.5rem] px-5 py-2 shadow-sm" ref={inputAreaRef}>
             <DocumentUploadButton
-              onUpload={uploadDocument}
+              onUpload={async (file, docType, brokerName, password) => {
+                const result = await uploadDocument(file, docType, brokerName, password);
+                if (result.status === "needs_password") {
+                  setPendingPassword(result);
+                  setPendingFile({ file, docType, brokerName });
+                }
+                return result;
+              }}
               disabled={sending}
               uploading={uploading}
             />

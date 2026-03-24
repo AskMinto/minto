@@ -329,6 +329,26 @@ def _tool_status_message(tool_name: str) -> str:
 def _build_analysis_payload(session_state: dict) -> dict:
     """Build a structured analysis payload from session_state for the frontend."""
     analysis = session_state.get("tax_analysis") or {}
+    holdings = session_state.get("broker_holdings_parsed") or {}
+
+    # Open positions from broker holdings — surface the most actionable ones
+    open_positions = [
+        {
+            "scrip_name": pos.get("scrip_name"),
+            "isin": pos.get("isin"),
+            "symbol": pos.get("symbol"),
+            "total_quantity": pos.get("total_quantity"),
+            "current_value": pos.get("current_value"),
+            "total_invested": pos.get("total_invested"),
+            "unrealised_gain": pos.get("unrealised_gain"),
+            "is_long_term": pos.get("is_long_term"),
+            "has_mixed_lots": pos.get("has_mixed_lots"),
+            "asset_class": pos.get("asset_class"),
+        }
+        for pos in (holdings.get("holdings") or [])
+        if pos.get("current_value") or pos.get("unrealised_gain")
+    ]
+
     return {
         "tax_year": session_state.get("financial_year", "2025-26"),
         "income_slab": session_state.get("income_slab"),
@@ -342,9 +362,23 @@ def _build_analysis_payload(session_state: dict) -> dict:
         "loss_harvest_mf": session_state.get("loss_harvest_mf") or [],
         "loss_harvest_stocks": session_state.get("loss_harvest_stocks") or [],
         "gains_harvest_mf": session_state.get("gains_harvest_mf") or [],
+        "term_actions": session_state.get("term_actions") or [],
+        "open_positions": open_positions,
         "cf_ltcl_remaining": analysis.get("cf_ltcl_remaining"),
         "cf_stcl_remaining": analysis.get("cf_stcl_remaining"),
+        "warnings": _build_warnings_payload(session_state, analysis),
     }
+
+
+def _build_warnings_payload(ss: dict, analysis: dict) -> list[str]:
+    warnings = []
+    if ss.get("has_fno"):
+        warnings.append("F&O activity detected — F&O income is treated as business income and is excluded from this capital gains analysis. Consult a CA.")
+    if ss.get("resident_status") == "nri":
+        warnings.append("NRI status — TDS thresholds and DTAA implications apply. This analysis covers resident Indian rules only. Consult a CA.")
+    if (analysis.get("step4_87a") or {}).get("rebate_forfeited"):
+        warnings.append("87A rebate forfeited — your total income including capital gains exceeds ₹12L.")
+    return warnings
 
 
 # ── Default prompts (fallback if not in prompts.yaml) ────────────────────────
