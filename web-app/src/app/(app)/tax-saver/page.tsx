@@ -1,7 +1,7 @@
 "use client";
 
-import { TaxWizard } from "./components/tax-wizard";
+import { TaxHarvestChat } from "./components/tax-harvest-chat";
 
 export default function TaxSaverPage() {
-  return <TaxWizard />;
+  return <TaxHarvestChat />;
 }

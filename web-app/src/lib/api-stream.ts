@@ -1,12 +1,17 @@
 import { createClient } from "@/lib/supabase/client";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+// In the browser, route through Next.js rewrites to avoid CORS issues
+const API_BASE_URL =
+  typeof window !== "undefined"
+    ? "/api/proxy"
+    : process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
 export interface SSEEvent {
-  type: "token" | "tool_started" | "tool_completed" | "done";
-  content?: string;
+  type: "token" | "tool_started" | "tool_completed" | "done" | "status" | "analysis";
+  content?: string | Record<string, unknown>;
   tool_name?: string;
   widgets?: Record<string, unknown>[];
+  session_state?: Record<string, unknown>;
 }
 
 export async function apiStream(
