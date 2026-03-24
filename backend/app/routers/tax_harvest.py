@@ -470,96 +470,78 @@ def delete_document(
 # ── Analysis payload builder ───────────────────────────────────────────────────
 
 def _detect_intake_widget(ss: dict, response_text: str) -> dict | None:
-    """Detect which intake question was just asked and return a widget config.
+    """Return a widget config for the first intake field still missing.
 
-    Looks at what intake fields are still missing and what keywords appear in
-    the agent's response. Returns a widget dict the frontend renders as
-    clickable option chips below the message bubble.
-
-    Returns None if intake is complete or no recognisable question was asked.
+    Uses a fixed priority order — no keyword matching — so the correct widget
+    always appears regardless of how the agent phrased the question.
+    Returns None once all intake fields are collected.
     """
-    text = response_text.lower()
-
-    # Intake complete — no widget needed
-    intake_fields = ["income_slab", "tax_regime", "resident_status", "brokers", "has_fno", "has_mf_outside_demat"]
-    all_done = all(ss.get(f) is not None for f in intake_fields)
-    if all_done:
-        return None
-
-    # Detect which question is being asked by keywords in the response
-    if ss.get("resident_status") is None and any(w in text for w in ["resident", "nri", "residential status"]):
-        return {
-            "field": "resident_status",
-            "question": "Your residential status",
-            "options": [
-                {"label": "Resident Indian", "value": "resident"},
-                {"label": "NRI", "value": "nri"},
-            ],
-            "multi": False,
-        }
-
-    if ss.get("income_slab") is None and any(w in text for w in ["income", "slab", "bracket", "salary", "earning"]):
-        return {
+    # All intake fields in the order the agent collects them
+    _WIDGETS: list[dict] = [
+        {
             "field": "income_slab",
-            "question": "Your annual income",
             "options": [
-                {"label": "< ₹5L", "value": "<5L"},
-                {"label": "₹5–10L", "value": "5-10L"},
+                {"label": "< ₹5L",   "value": "<5L"},
+                {"label": "₹5–10L",  "value": "5-10L"},
                 {"label": "₹10–15L", "value": "10-15L"},
                 {"label": "₹15–30L", "value": "15-30L"},
-                {"label": "> ₹30L", "value": ">30L"},
+                {"label": "> ₹30L",  "value": ">30L"},
             ],
             "multi": False,
-        }
-
-    if ss.get("tax_regime") is None and any(w in text for w in ["regime", "old regime", "new regime"]):
-        return {
+        },
+        {
             "field": "tax_regime",
-            "question": "Your tax regime",
             "options": [
                 {"label": "New Regime", "value": "new"},
                 {"label": "Old Regime", "value": "old"},
             ],
             "multi": False,
-        }
-
-    if ss.get("brokers") in (None, [], "") and any(w in text for w in ["broker", "zerodha", "groww", "upstox", "platform", "trade"]):
-        return {
-            "field": "brokers",
-            "question": "Which brokers do you use?",
+        },
+        {
+            "field": "resident_status",
             "options": [
-                {"label": "Zerodha", "value": "Zerodha"},
-                {"label": "Groww", "value": "Groww"},
-                {"label": "Upstox", "value": "Upstox"},
-                {"label": "Angel One", "value": "Angel One"},
-                {"label": "ICICI Direct", "value": "ICICI Direct"},
-                {"label": "HDFC Securities", "value": "HDFC Securities"},
-                {"label": "Other", "value": "Other"},
+                {"label": "Resident Indian", "value": "resident"},
+                {"label": "NRI",             "value": "nri"},
+            ],
+            "multi": False,
+        },
+        {
+            "field": "brokers",
+            "options": [
+                {"label": "Zerodha",          "value": "Zerodha"},
+                {"label": "Groww",            "value": "Groww"},
+                {"label": "Upstox",           "value": "Upstox"},
+                {"label": "Angel One",        "value": "Angel One"},
+                {"label": "ICICI Direct",     "value": "ICICI Direct"},
+                {"label": "HDFC Securities",  "value": "HDFC Securities"},
+                {"label": "Other",            "value": "Other"},
             ],
             "multi": True,
-        }
-
-    if ss.get("has_fno") is None and any(w in text for w in ["f&o", "fno", "futures", "options", "derivatives"]):
-        return {
+        },
+        {
             "field": "has_fno",
-            "question": "Do you trade F&O?",
             "options": [
-                {"label": "Yes", "value": "true"},
-                {"label": "No", "value": "false"},
+                {"label": "Yes, I trade F&O", "value": "true"},
+                {"label": "No",               "value": "false"},
             ],
             "multi": False,
-        }
-
-    if ss.get("has_mf_outside_demat") is None and any(w in text for w in ["cams", "kfintech", "mfcentral", "outside demat", "mutual fund", "folio"]):
-        return {
+        },
+        {
             "field": "has_mf_outside_demat",
-            "question": "Do you hold mutual funds via CAMS/KFintech?",
             "options": [
                 {"label": "Yes", "value": "true"},
-                {"label": "No", "value": "false"},
+                {"label": "No",  "value": "false"},
             ],
             "multi": False,
-        }
+        },
+    ]
+
+    for w in _WIDGETS:
+        field = w["field"]
+        val = ss.get(field)
+        # Field missing: empty string, None, or empty list
+        if val is None or val == "" or val == []:
+            return w
 
     return None
 

@@ -283,8 +283,6 @@ async def run_tax_harvest_team(
     of the returned content — keeping the chunk loop inside StreamingResponse's
     generator so Starlette flushes each chunk immediately as it is yielded.
     """
-    updated_ss = session_state.copy()
-
     def _run_sync():
         team = build_tax_harvest_team(session_state, messages, user_id)
         return team.run(user_message)
@@ -293,17 +291,19 @@ async def run_tax_harvest_team(
         result = await asyncio.to_thread(_run_sync)
     except Exception as e:
         logger.error(f"run_tax_harvest_team: team run failed: {e}", exc_info=True)
-        return "Something went wrong. Please try again.", updated_ss
+        return "Something went wrong. Please try again.", session_state
 
     full_content = str(result.content) if result and result.content else ""
 
-    # Collect session state updates from all member responses
+    # The tools mutate session_state in-place via the closure, so session_state
+    # already contains all save_intake_answer() updates after team.run() returns.
+    # Also merge any session_state from member_responses as a belt-and-braces.
     if result and hasattr(result, "member_responses"):
         for mr in (result.member_responses or []):
             if hasattr(mr, "session_state") and mr.session_state:
-                updated_ss.update(mr.session_state)
+                session_state.update(mr.session_state)
 
-    return full_content, updated_ss
+    return full_content, session_state
 
 
 def _tool_status_message(tool_name: str) -> str:
