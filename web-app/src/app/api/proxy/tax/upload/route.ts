@@ -28,19 +28,23 @@ async function handler(request: NextRequest): Promise<NextResponse> {
 
   const targetUrl = `${backendUrl}/tax/upload`;
 
-  // Forward the Authorization header from the browser
+  // Forward Authorization and Content-Type (multipart/form-data with boundary).
+  // Without the Content-Type header FastAPI cannot parse the multipart body,
+  // so file and doc_type arrive as null → 422 Unprocessable Content.
   const headers: Record<string, string> = {};
   const auth = request.headers.get("authorization");
   if (auth) headers["authorization"] = auth;
+  const contentType = request.headers.get("content-type");
+  if (contentType) headers["content-type"] = contentType;
 
-  // Forward the body as-is (multipart/form-data — don't touch Content-Type,
-  // the browser set the correct boundary)
+  // Read the body as an ArrayBuffer so it is fully buffered before forwarding.
+  // Streaming via request.body can drop the boundary on some Node.js versions.
+  const bodyBuffer = await request.arrayBuffer();
+
   const response = await fetch(targetUrl, {
     method: "POST",
     headers,
-    body: request.body,
-    // @ts-expect-error — duplex is required for streaming body in Node.js fetch
-    duplex: "half",
+    body: bodyBuffer,
   });
 
   const data = await response.json();
