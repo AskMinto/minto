@@ -21,9 +21,8 @@ import json
 import logging
 from typing import AsyncGenerator
 
-from agno.agent import Agent, RunEvent
+from agno.agent import Agent
 from agno.models.google import Gemini
-from agno.run.team import TeamRunEvent
 from agno.team import Team
 from agno.team.mode import TeamMode
 
@@ -282,97 +281,56 @@ async def run_tax_harvest_team_stream(
 ) -> AsyncGenerator[dict, None]:
     """Run the tax harvest team and yield SSE-compatible event dicts.
 
-    Yields:
-        {"type": "status", "content": str}     — tool status messages
-        {"type": "token", "content": str}       — streaming text tokens
-        {"type": "analysis", "content": dict}  — final analysis payload (if computed)
-        {"type": "done", "content": str}        — final full response
-    """
-    team = build_tax_harvest_team(session_state, messages, user_id)
+    Runs the team synchronously in a thread (same pattern as web_agent.py /
+    tax_chat.py), then simulates word-by-word streaming on the result.
+    This avoids the Agno route-mode streaming duplication bug where both
+    TeamRunEvent.run_intermediate_content (member tokens) and
+    TeamRunEvent.run_content (team leader pass-through) fire for the same text.
 
+    Yields:
+        {"type": "token", "content": str}       — streaming text chunks
+        {"type": "analysis", "content": dict}  — structured analysis payload
+        {"type": "done", "content": str, "session_state": dict}
+    """
     full_content = ""
     updated_ss = session_state.copy()
 
-    def _run_team():
-        return team.run(user_message, stream=True, stream_events=True)
+    def _run_sync():
+        team = build_tax_harvest_team(session_state, messages, user_id)
+        result = team.run(user_message)
+        return result
 
-    # Run team in thread to avoid blocking event loop
     try:
-        stream_iter = await asyncio.to_thread(_run_team)
+        result = await asyncio.to_thread(_run_sync)
     except Exception as e:
-        logger.error(f"run_tax_harvest_team_stream: team init failed: {e}", exc_info=True)
+        logger.error(f"run_tax_harvest_team_stream: team run failed: {e}", exc_info=True)
         yield {"type": "token", "content": "Something went wrong. Please try again."}
-        yield {"type": "done", "content": "Something went wrong. Please try again."}
+        yield {"type": "done", "content": "Something went wrong. Please try again.", "session_state": updated_ss}
         return
 
-    # Stream events — must run in thread since team.run() is synchronous
-    def _collect_events():
-        events = []
-        pending_args = {}
-        try:
-            for chunk in stream_iter:
-                event = getattr(chunk, "event", None)
-                if event in (TeamRunEvent.run_content, TeamRunEvent.run_intermediate_content, RunEvent.run_content):
-                    token = chunk.content or ""
-                    if token:
-                        events.append(("token", token))
-                elif event in (TeamRunEvent.tool_call_started, RunEvent.tool_call_started):
-                    if hasattr(chunk, "tool") and chunk.tool:
-                        tool_name = chunk.tool.tool_name or ""
-                        call_id = chunk.tool.tool_call_id or tool_name
-                        pending_args[call_id] = {"name": tool_name, "args": chunk.tool.tool_args or {}}
-                        status = _tool_status_message(tool_name)
-                        if status:
-                            events.append(("status", status))
-                elif event in (TeamRunEvent.tool_call_completed, RunEvent.tool_call_completed):
-                    pass  # tool results handled via session_state
-                elif event == TeamRunEvent.run_completed:
-                    if hasattr(chunk, "member_responses"):
-                        for mr in (chunk.member_responses or []):
-                            if hasattr(mr, "session_state") and mr.session_state:
-                                events.append(("session_update", mr.session_state))
-        except Exception as e:
-            logger.error(f"_collect_events: streaming error: {e}", exc_info=True)
-        return events
+    if result and result.content:
+        full_content = str(result.content)
 
-    events = await asyncio.to_thread(_collect_events)
+    # Collect session state updates from all member responses
+    if result and hasattr(result, "member_responses"):
+        for mr in (result.member_responses or []):
+            if hasattr(mr, "session_state") and mr.session_state:
+                updated_ss.update(mr.session_state)
 
-    for event_type, event_data in events:
-        if event_type == "token":
-            full_content += event_data
-            yield {"type": "token", "content": event_data}
-        elif event_type == "status":
-            yield {"type": "status", "content": event_data}
-        elif event_type == "session_update":
-            updated_ss.update(event_data)
+    # Simulate word-by-word streaming (3 words per chunk) — matches web_agent.py pattern
+    if full_content:
+        words = full_content.split(" ")
+        chunk_size = 3
+        for i in range(0, len(words), chunk_size):
+            chunk = " ".join(words[i:i + chunk_size])
+            if i + chunk_size < len(words):
+                chunk += " "
+            yield {"type": "token", "content": chunk}
+            await asyncio.sleep(0)  # yield to event loop between chunks
 
-    # If no streaming content, fall back to non-streaming run
-    if not full_content:
-        try:
-            def _run_sync():
-                team2 = build_tax_harvest_team(session_state, messages, user_id)
-                result = team2.run(user_message)
-                return result
-
-            result = await asyncio.to_thread(_run_sync)
-            if result and result.content:
-                full_content = str(result.content)
-                yield {"type": "token", "content": full_content}
-
-                # Collect session updates from member responses
-                if hasattr(result, "member_responses"):
-                    for mr in (result.member_responses or []):
-                        if hasattr(mr, "session_state") and mr.session_state:
-                            updated_ss.update(mr.session_state)
-        except Exception as e:
-            logger.error(f"run_tax_harvest_team_stream: fallback run failed: {e}", exc_info=True)
-            full_content = "Something went wrong. Please try again."
-            yield {"type": "token", "content": full_content}
-
-    # Emit analysis payload if computation just completed
+    # Emit structured analysis payload if computation completed this turn
     if updated_ss.get("tax_analysis") and not session_state.get("tax_analysis"):
-        analysis_payload = _build_analysis_payload(updated_ss)
-        yield {"type": "analysis", "content": analysis_payload}
+        yield {"type": "analysis", "content": _build_analysis_payload(updated_ss)}
 
     yield {"type": "done", "content": full_content, "session_state": updated_ss}
 
