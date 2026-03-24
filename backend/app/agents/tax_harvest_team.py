@@ -1,13 +1,14 @@
 """Tax Harvest multi-agent team using Agno route-mode Team.
 
 Architecture (PRD §4):
-  OrchestratorAgent (route mode, Gemini Flash as router)
+  OrchestratorAgent (route mode, gemini-3.1-pro-preview as router)
   ├── IntakeAgent          — conversation, collects context
   ├── DocumentRouterAgent  — detects file type, parses documents
   ├── NormalisationAgent   — confirms data, explains what was found
   ├── TaxComputationAgent  — runs LTCG/STCG/FOF/ELSS rules engine
   └── HarvestingAgent      — generates actionable recommendations
 
+All agents — including the orchestrator/router — use gemini-3.1-pro-preview.
 Session state is loaded before the team runs and saved back afterwards.
 All specialist agents share the same tools (closure-bound to session_state).
 The team leader uses route mode: exactly ONE specialist handles each turn.
@@ -33,19 +34,12 @@ from .tax_harvest_tools import make_tax_harvest_tools
 
 logger = logging.getLogger(__name__)
 
-# ── Model helpers ─────────────────────────────────────────────────────────────
+# ── Model helper ──────────────────────────────────────────────────────────────
 
-def _pro_model() -> Gemini:
-    """Gemini Pro model for specialist agents (document parsing, analysis)."""
+def _pro_model(temperature: float = 0.2) -> Gemini:
+    """gemini-3.1-pro-preview — used for ALL agents including the team router."""
     cfg = model_config._data.get("tax_harvest_agent", {})
     model_id = cfg.get("model", "gemini-3.1-pro-preview")
-    return Gemini(id=model_id, api_key=GEMINI_API_KEY)
-
-
-def _flash_model(temperature: float = 0.1) -> Gemini:
-    """Gemini Flash model for the team router and lighter tasks."""
-    router_cfg = model_config._data.get("team_router", {})
-    model_id = router_cfg.get("model", "gemini-3-flash-preview")
     return Gemini(id=model_id, api_key=GEMINI_API_KEY, temperature=temperature)
 
 
@@ -267,7 +261,7 @@ def build_tax_harvest_team(session_state: dict, messages: list[dict], user_id: s
     return Team(
         name="TaxHarvestOrchestrator",
         mode=TeamMode.route,
-        model=_flash_model(temperature=0.1),
+        model=_pro_model(temperature=0.1),
         members=[intake, doc_router, normalisation, tax_comp, harvesting],
         instructions=router_instructions,
         additional_context=history_context or None,
