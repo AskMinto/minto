@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Check } from "lucide-react";
+import { apiPost } from "@/lib/api";
 
 export interface IntakeWidgetOption {
   label: string;
@@ -25,17 +26,27 @@ export function WidgetIntake({ widget, onSubmit, disabled }: Props) {
   const [selected, setSelected] = useState<string[]>([]);
   const [submitted, setSubmitted] = useState(false);
 
+  const persist = async (value: string | string[]) => {
+    // Save directly to the session — do not rely on the LLM calling the tool
+    try {
+      await apiPost("/tax-harvest/intake", { field: widget.field, value });
+    } catch {
+      // non-fatal — the agent may still save it via tool call
+    }
+  };
+
   const toggle = (value: string) => {
     if (widget.multi) {
       setSelected((prev) =>
         prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
       );
     } else {
-      // Single select — submit immediately
+      // Single select — persist + submit immediately
       setSelected([value]);
       setSubmitted(true);
       const opt = widget.options.find((o) => o.value === value);
-      onSubmit(opt?.label ?? value);
+      const label = opt?.label ?? value;
+      persist(value).then(() => onSubmit(label));
     }
   };
 
@@ -45,7 +56,7 @@ export function WidgetIntake({ widget, onSubmit, disabled }: Props) {
     const labels = selected
       .map((v) => widget.options.find((o) => o.value === v)?.label ?? v)
       .join(", ");
-    onSubmit(labels);
+    persist(selected).then(() => onSubmit(labels));
   };
 
   if (submitted) {

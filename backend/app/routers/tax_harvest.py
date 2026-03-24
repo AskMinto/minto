@@ -165,6 +165,37 @@ def delete_session(user: UserContext = Depends(get_user_context)):
     return {"status": "deleted"}
 
 
+class IntakeAnswerRequest(BaseModel):
+    field: str
+    value: Any
+
+
+_ALLOWED_INTAKE_FIELDS = {
+    "income_slab", "tax_regime", "resident_status",
+    "brokers", "has_fno", "has_mf_outside_demat",
+    "financial_year",
+}
+
+
+@router.post("/intake")
+def post_intake_answer(
+    body: IntakeAnswerRequest,
+    user: UserContext = Depends(get_user_context),
+):
+    """Directly persist a single intake answer to the session.
+
+    Called by the frontend widget on chip tap — bypasses the LLM so the
+    answer is guaranteed to be saved regardless of tool-call reliability.
+    """
+    if body.field not in _ALLOWED_INTAKE_FIELDS:
+        raise HTTPException(status_code=400, detail=f"Field '{body.field}' not allowed.")
+
+    ss, msgs = _load_harvest_session(user.user_id)
+    ss[body.field] = body.value
+    save_tax_session(user.user_id, ss, msgs)
+    return {"status": "ok", "field": body.field, "value": body.value}
+
+
 @router.post("/message")
 async def tax_harvest_message_stream(
     body: ChatMessageRequest,
