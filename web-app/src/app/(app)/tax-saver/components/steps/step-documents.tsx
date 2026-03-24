@@ -1,6 +1,7 @@
 "use client";
 
-import { CheckCircle, Upload, AlertCircle, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle, Upload, AlertCircle, Loader2, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { WizardSessionState, HoldingsContext } from "@/hooks/use-tax-wizard";
 
 interface Props {
@@ -12,24 +13,128 @@ interface Props {
   analysing: boolean;
 }
 
-const DOC_INFO: Record<string, { label: string; hint: string }> = {
+// Download instructions per document type
+const DOC_INSTRUCTIONS: Record<string, {
+  label: string;
+  steps: { text: string; link?: string }[];
+  warnings: string[];
+}> = {
   cas: {
     label: "MFCentral CAS PDF",
-    hint: "Detailed CAS from mfcentral.com · Set a password when downloading",
+    steps: [
+      { text: "Go to mfcentral.com", link: "https://www.mfcentral.com" },
+      { text: "Enter your mobile number and OTP" },
+      { text: "Go to Reports → Consolidated Account Statement" },
+      { text: "Select: Detailed (not Summary) ⚠️" },
+      { text: "Check the box: Select All Folios ⚠️" },
+      { text: "Period: Apr 2025 to Today" },
+      { text: "Set a password for the document (you'll need it when uploading)" },
+      { text: "Download the PDF" },
+    ],
+    warnings: [
+      "You must select Detailed — Summary CAS doesn't have transaction history needed to calculate gains.",
+      "Check 'Select All Folios' — missing this will exclude some of your funds.",
+    ],
   },
   broker_pl: {
     label: "Broker Tax P&L",
-    hint: "CSV, Excel or PDF from your broker's Tax P&L / Capital Gains section · FY 2025-26",
+    steps: [
+      { text: "Zerodha: console.zerodha.com → Reports → Tax P&L → FY 2025-26 → Download CSV", link: "https://console.zerodha.com" },
+      { text: "Groww: groww.in → Profile → Reports → Capital Gains → FY 2025-26 → Download", link: "https://groww.in" },
+      { text: "Upstox: upstox.com → Reports → P&L → FY 2025-26 → Download CSV", link: "https://upstox.com" },
+      { text: "Angel One: angelone.in → My Portfolio → Reports → P&L → FY 2025-26", link: "https://www.angelone.in" },
+      { text: "ICICI Direct: icicidirect.com → My Account → Reports → Capital Gain/Loss → FY 2025-26", link: "https://www.icicidirect.com" },
+      { text: "Other brokers: look for Reports → Tax P&L or Capital Gains Statement → FY 2025-26" },
+    ],
+    warnings: [
+      "Download as CSV or Excel if available — PDFs are supported but CSV is most accurate.",
+      "This must cover FY 2025-26 (Apr 2025 – Mar 2026).",
+    ],
   },
   broker_holdings: {
-    label: "Broker Holdings",
-    hint: "CSV, Excel or PDF of your current holdings from your broker",
+    label: "Broker Holdings Export",
+    steps: [
+      { text: "Zerodha: console.zerodha.com → Portfolio → Holdings → Download CSV", link: "https://console.zerodha.com" },
+      { text: "Groww: groww.in → Stocks → Holdings → Export", link: "https://groww.in" },
+      { text: "Upstox: upstox.com → Portfolio → Holdings → Export CSV", link: "https://upstox.com" },
+      { text: "Angel One: angelone.in → My Portfolio → Holdings → Download", link: "https://www.angelone.in" },
+      { text: "Other brokers: look for Portfolio → Holdings → Download or Export" },
+    ],
+    warnings: [
+      "This shows your current unrealised positions — needed to identify loss harvesting opportunities.",
+      "Different from the Tax P&L — make sure you download the Holdings (not P&L) file.",
+    ],
   },
   itr: {
     label: "ITR PDF",
-    hint: "ITR-2 or ITR-3 from incometax.gov.in · AY 2025-26 · Schedule CFL section",
+    steps: [
+      { text: "Go to incometax.gov.in", link: "https://eportal.incometax.gov.in" },
+      { text: "Login with PAN + password or Aadhaar OTP" },
+      { text: "e-File → Income Tax Returns → View Filed Returns" },
+      { text: "Click on AY 2025-26 (filed for FY 2024-25)" },
+      { text: "Download the ITR PDF or JSON" },
+    ],
+    warnings: [
+      "We only need Schedule CFL (Carry Forward Losses) from this document.",
+      "If you filed ITR-1, it won't have Schedule CFL — you can skip this or enter figures manually.",
+    ],
   },
 };
+
+function DocInstructions({ docKey }: { docKey: string }) {
+  const [open, setOpen] = useState(false);
+  const info = DOC_INSTRUCTIONS[docKey];
+  if (!info) return null;
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex items-center gap-1.5 text-xs text-minto-accent hover:underline"
+      >
+        {open ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        {open ? "Hide" : "How to download this"}
+      </button>
+
+      {open && (
+        <div className="mt-3 glass-subtle rounded-xl p-4 space-y-3">
+          <ol className="space-y-2">
+            {info.steps.map((step, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs text-minto-text-secondary">
+                <span className="shrink-0 w-4 h-4 rounded-full bg-minto-accent/20 text-minto-accent flex items-center justify-center text-[10px] font-bold mt-0.5">
+                  {i + 1}
+                </span>
+                <span>
+                  {step.text}
+                  {step.link && (
+                    <a
+                      href={step.link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-0.5 text-minto-accent ml-1 hover:underline"
+                    >
+                      <ExternalLink size={10} />
+                    </a>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ol>
+          {info.warnings.length > 0 && (
+            <div className="space-y-1 pt-2 border-t border-white/20">
+              {info.warnings.map((w, i) => (
+                <p key={i} className="text-xs text-amber-600 flex items-start gap-1.5">
+                  <span className="shrink-0 mt-0.5">⚠️</span>
+                  {w}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function StepDocuments({
   sessionState,
@@ -64,10 +169,10 @@ export function StepDocuments({
         </div>
       )}
 
-      {/* Document list */}
+      {/* Document list with inline download instructions */}
       <div className="w-full space-y-3 mb-8">
         {needed.map((docKey) => {
-          const info = DOC_INFO[docKey];
+          const info = DOC_INSTRUCTIONS[docKey];
           const isDone = done.includes(docKey);
           return (
             <div
@@ -88,11 +193,10 @@ export function StepDocuments({
                   <p className={`text-sm font-medium ${isDone ? "text-minto-positive" : "text-minto-text"}`}>
                     {info?.label || docKey}
                   </p>
-                  {!isDone && info?.hint && (
-                    <p className="text-xs text-minto-text-muted mt-0.5">{info.hint}</p>
-                  )}
-                  {isDone && (
+                  {isDone ? (
                     <p className="text-xs text-minto-positive/80 mt-0.5">Parsed successfully</p>
+                  ) : (
+                    <DocInstructions docKey={docKey} />
                   )}
                 </div>
               </div>
@@ -129,7 +233,6 @@ export function StepDocuments({
       {/* DPDPA privacy note */}
       <div className="glass-subtle rounded-2xl px-4 py-3 mb-8 text-xs text-minto-text-muted w-full">
         🔒 Raw files are deleted within 60 seconds of parsing. Only derived summary figures are stored (DPDPA 2023 compliant).
-        Message &quot;Delete my data&quot; in the chat to erase everything immediately.
       </div>
 
       {/* Analyse button */}

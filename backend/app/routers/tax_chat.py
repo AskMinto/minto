@@ -278,6 +278,35 @@ async def tax_upload(
         logger.error(f"tax_upload: parse failed for {user.user_id}, doc_type={doc_type}: {e}")
         return {"status": "error", "message": f"Could not read this document. {_parse_error_hint(doc_type)}"}
 
+    # ── CAS: detect Summary CAS and require user confirmation ─────────────────
+    # A Summary CAS has no transaction-level data, so we cannot compute
+    # realised LTCG/STCG from it. We allow it only if the user confirms they
+    # have made zero redemptions/switches this FY (in which case gains = 0).
+    if doc_type == "cas":
+        cas_type = parsed.get("cas_type", "detailed")
+        has_transactions = any(
+            folio.get("fy_transactions")
+            for folio in (parsed.get("folios") or [])
+        )
+        has_realised = (
+            abs(float(parsed.get("total_realised_ltcg_fy") or 0)) > 0
+            or abs(float(parsed.get("total_realised_stcg_fy") or 0)) > 0
+            or abs(float(parsed.get("total_realised_ltcl_fy") or 0)) > 0
+            or abs(float(parsed.get("total_realised_stcl_fy") or 0)) > 0
+        )
+        if cas_type == "summary" or (not has_transactions and not has_realised):
+            # Return without saving — frontend must confirm before proceeding
+            return {
+                "status": "needs_confirmation",
+                "message": (
+                    "This looks like a Summary CAS — it shows your current holdings "
+                    "but not individual transaction details. Without transaction history "
+                    "we cannot calculate your realised gains (LTCG/STCG) accurately."
+                ),
+                "question": "Have you redeemed, switched, or done an STP from any mutual fund between April 2025 and today?",
+                "parsed": parsed,  # kept in memory; frontend sends it back with confirm=true/false
+            }
+
     # Store in session
     loop = asyncio.get_running_loop()
     session_state, messages = await loop.run_in_executor(None, load_tax_session, user.user_id)
@@ -315,6 +344,55 @@ async def tax_upload(
         "status": "parsed",
         "doc_type": doc_type,
         "sentinel": sentinel,
+        "session_summary": _safe_session_summary(session_state),
+    }
+
+
+class ConfirmSummaryCasRequest(BaseModel):
+    has_transactions: bool  # True = user says they DID sell/redeem → needs detailed CAS
+    parsed: dict            # the parsed CAS dict sent back from the needs_confirmation response
+
+
+@router.post("/upload/confirm-summary-cas")
+async def confirm_summary_cas(
+    body: ConfirmSummaryCasRequest,
+    user: UserContext = Depends(get_user_context),
+):
+    """Finalise a summary CAS upload after user confirms transaction status.
+
+    If has_transactions=True: user made redemptions this year but uploaded a
+    Summary CAS. We reject it — they need to re-download as Detailed.
+
+    If has_transactions=False: user confirms zero redemptions this year.
+    We store the Summary CAS as-is; all realised gains will be zero, which
+    is correct because they haven't sold anything.
+    """
+    if body.has_transactions:
+        return {
+            "status": "needs_detailed",
+            "message": (
+                "Since you've made transactions this year, you need to upload a "
+                "Detailed CAS (not Summary) so we can see the full transaction history "
+                "and calculate your gains accurately. Please re-download from MFCentral "
+                "and select 'Detailed' before uploading."
+            ),
+        }
+
+    # No transactions — safe to proceed with summary CAS (gains = 0)
+    parsed = body.parsed
+    loop = asyncio.get_running_loop()
+    session_state, messages = await loop.run_in_executor(None, load_tax_session, user.user_id)
+    session_state["cas_parsed"] = parsed
+    docs_done = list(session_state.get("documents_done") or [])
+    if "cas" not in docs_done:
+        docs_done.append("cas")
+    session_state["documents_done"] = docs_done
+    await loop.run_in_executor(None, save_tax_session, user.user_id, session_state, messages)
+
+    return {
+        "status": "parsed",
+        "doc_type": "cas",
+        "confirmed_no_transactions": True,
         "session_summary": _safe_session_summary(session_state),
     }
 
