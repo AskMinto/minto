@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle, TrendingDown, TrendingUp, AlertCircle, RefreshCw } from "lucide-react";
+import { CheckCircle, TrendingDown, TrendingUp, AlertCircle, RefreshCw, RotateCcw } from "lucide-react";
 import { WizardSessionState, LossCandidate, GainsCandidate } from "@/hooks/use-tax-wizard";
 
 interface Props {
   sessionState: WizardSessionState;
   onSyncHoldings: (brokerName?: string) => Promise<{ upserted: number; message: string }>;
   onUploadMore: () => void;
+  onStartOver: () => Promise<void>;
 }
 
 function fmt(n: number | null | undefined): string {
@@ -20,9 +21,10 @@ function pct(n: number | null | undefined): string {
   return `${(n * 100).toFixed(0)}%`;
 }
 
-export function StepAnalysis({ sessionState, onSyncHoldings, onUploadMore }: Props) {
+export function StepAnalysis({ sessionState, onSyncHoldings, onUploadMore, onStartOver }: Props) {
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [startingOver, setStartingOver] = useState(false);
 
   const analysis = sessionState.tax_analysis;
   const lossMf = sessionState.loss_harvest_mf || [];
@@ -220,10 +222,25 @@ export function StepAnalysis({ sessionState, onSyncHoldings, onUploadMore }: Pro
       )}
 
       {/* Disclaimer */}
-      <p className="text-xs text-minto-text-muted text-center pb-4">
+      <p className="text-xs text-minto-text-muted text-center">
         Surcharge and 4% cess not included. This is informational only — consult a CA for your final tax liability.
         Dividend income is taxed separately as Income from Other Sources.
       </p>
+
+      {/* Start over */}
+      <div className="flex justify-center pb-6">
+        <button
+          onClick={async () => {
+            setStartingOver(true);
+            await onStartOver();
+          }}
+          disabled={startingOver}
+          className="flex items-center gap-2 text-minto-text-muted hover:text-minto-text text-xs py-2 px-4 rounded-full hover:bg-black/5 transition-colors disabled:opacity-40"
+        >
+          <RotateCcw size={12} className={startingOver ? "animate-spin" : ""} />
+          {startingOver ? "Resetting…" : "Start over with new documents"}
+        </button>
+      </div>
     </div>
   );
 }

@@ -183,9 +183,8 @@ export function TaxWizard() {
           <StepAnalysis
             sessionState={sessionState}
             onSyncHoldings={wizard.syncHoldings}
-            onUploadMore={() => {
-              wizard.setStep("documents");
-            }}
+            onUploadMore={() => wizard.setStep("documents")}
+            onStartOver={wizard.startOver}
           />
         );
 

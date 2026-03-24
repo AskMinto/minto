@@ -331,6 +331,17 @@ export function useTaxWizard() {
     await loadDocuments();
   }, [loadSession, loadDocuments]);
 
+  // Delete the session and reset to the welcome step
+  const startOver = useCallback(async (): Promise<void> => {
+    try {
+      await apiDelete("/tax/session");
+    } catch {
+      // Non-fatal — reset local state regardless
+    }
+    setSessionState(DEFAULT_STATE);
+    setDocuments([]);
+  }, []);
+
   return {
     sessionState,
     loading,
@@ -348,5 +359,6 @@ export function useTaxWizard() {
     syncHoldings,
     deleteDocument,
     refreshSession,
+    startOver,
   };
 }
