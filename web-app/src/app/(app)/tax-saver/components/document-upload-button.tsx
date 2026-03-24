@@ -53,7 +53,11 @@ export function DocumentUploadButton({ onUpload, disabled, uploading }: Props) {
       setSelectedFile(null);
       setPassword("");
       setBroker("");
-      // Reset file input
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    } else if (result.status === "needs_password") {
+      // Close the modal — the parent TaxHarvestChat will render the inline PasswordPrompt
+      setOpen(false);
+      setSelectedFile(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     } else if (result.status === "wrong_password") {
       setPasswordError("Incorrect password. Try your PAN or date of birth.");
@@ -161,32 +165,9 @@ export function DocumentUploadButton({ onUpload, disabled, uploading }: Props) {
             </div>
           </div>
 
-          {/* Password field if needed */}
-          {uploadResult?.status === "needs_password" && (
-            <div>
-              <label className="text-xs text-minto-text-muted mb-1 block">
-                Password (typically PAN or date of birth DDMMYYYY)
-              </label>
-              {passwordError && (
-                <div className="text-xs text-red-600 mb-1.5">{passwordError}</div>
-              )}
-              <div className="flex gap-2">
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handlePasswordSubmit()}
-                  placeholder="Enter password"
-                  autoFocus
-                  className="flex-1 bg-white/70 border border-white/50 rounded-xl px-3 py-2 text-sm text-minto-text placeholder:text-minto-text-muted focus:outline-none"
-                />
-              </div>
-            </div>
-          )}
-
           {/* Upload button */}
           <button
-            onClick={uploadResult?.status === "needs_password" ? handlePasswordSubmit : handleUpload}
+            onClick={handleUpload}
             disabled={!selectedFile || uploading || (needsBroker && !broker)}
             className="w-full flex items-center justify-center gap-2 bg-minto-accent text-white rounded-xl py-2.5 text-sm font-medium disabled:opacity-40 hover:opacity-90 transition-opacity"
           >
@@ -195,7 +176,7 @@ export function DocumentUploadButton({ onUpload, disabled, uploading }: Props) {
             ) : (
               <>
                 <Upload size={15} />
-                {uploadResult?.status === "needs_password" ? "Unlock & Parse" : "Upload & Parse"}
+                Upload & Parse
               </>
             )}
           </button>

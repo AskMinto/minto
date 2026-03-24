@@ -184,6 +184,7 @@ export function useTaxHarvest() {
       ]);
 
       let streamedContent = "";
+      let receivedFirstToken = false;
 
       try {
         await apiStream(
@@ -191,7 +192,11 @@ export function useTaxHarvest() {
           { content: text },
           (event) => {
             const content = event.content;
+            // status event — keep the typing indicator (empty assistant bubble) visible
+            if (event.type === "status") return;
             if (event.type === "token" && typeof content === "string") {
+              // Clear the typing indicator on first real token
+              if (!receivedFirstToken) receivedFirstToken = true;
               streamedContent += content;
               const updated = streamedContent;
               setMessages((prev) => {

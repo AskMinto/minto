@@ -191,9 +191,23 @@ def post_intake_answer(
         raise HTTPException(status_code=400, detail=f"Field '{body.field}' not allowed.")
 
     ss, msgs = _load_harvest_session(user.user_id)
-    ss[body.field] = body.value
+
+    # Coerce boolean strings to actual booleans so Python truthiness works correctly
+    # e.g. widget sends "true"/"false" strings for has_fno, has_mf_outside_demat
+    value = body.value
+    if isinstance(value, str) and value.lower() in ("true", "false"):
+        value = value.lower() == "true"
+    # Coerce string lists (shouldn't happen but be safe)
+    if isinstance(value, str) and value.startswith("["):
+        try:
+            import json as _json
+            value = _json.loads(value)
+        except Exception:
+            pass
+
+    ss[body.field] = value
     save_tax_session(user.user_id, ss, msgs)
-    return {"status": "ok", "field": body.field, "value": body.value}
+    return {"status": "ok", "field": body.field, "value": value}
 
 
 @router.post("/message")
@@ -220,6 +234,9 @@ async def tax_harvest_message_stream(
         full_content = ""
         updated_ss = session_state
 
+        # Emit status BEFORE the LLM call so the user sees activity immediately
+        yield f"data: {json.dumps({'type': 'status', 'content': '⏳ Thinking...'})}\n\n"
+
         try:
             full_content, updated_ss = await run_tax_harvest_team(
                 user_message=body.content,
@@ -230,9 +247,6 @@ async def tax_harvest_message_stream(
         except Exception as e:
             logger.error(f"tax_harvest_message_stream: error for {user.user_id}: {e}", exc_info=True)
             full_content = "Something went wrong. Please try sending your message again."
-
-        # Status event so the user sees something while the LLM thinks
-        yield f"data: {json.dumps({'type': 'status', 'content': '⏳ Thinking...'})}\n\n"
 
         # Word-by-word streaming — chunk loop lives here inside StreamingResponse's
         # generator so Starlette flushes each SSE frame immediately as it is yielded.
