@@ -37,33 +37,53 @@ def stream_tax_analysis(
 ) -> Iterator[str]:
     """Run the tax analysis agent with true streaming — yields tokens as Gemini produces them.
 
-    Uses the same agent.run(stream=True, stream_events=True) + RunEvent.run_content
-    pattern as research_agent.py. No fake word-splitting; tokens arrive in real time.
+    For the initial analysis (no messages): passes the full prompt as a single user turn.
+    For follow-up questions (messages exist): passes context once in the system prompt and
+    conversation history as proper role/content message pairs so the agent knows it's
+    in a follow-up context and gives a short, targeted answer instead of re-running
+    the full analysis.
     """
     from agno.agent import Agent, RunEvent
     from agno.models.google import Gemini
     from ..core.config import GEMINI_API_KEY
 
     context = _build_context(intake_answers, tax_docs)
-    history = _build_history_context(messages)
+    is_followup = any(m.get("role") == "assistant" for m in messages)
 
-    full_user_message = ""
-    if history:
-        full_user_message += history + "\n\n"
-    full_user_message += "## CONTEXT\n" + context + "\n\n"
-    full_user_message += "## USER MESSAGE\n" + user_message
+    # Build the system description — always includes context so the agent
+    # can reference specific figures from the documents in follow-up answers
+    system = _build_system_prompt() + "\n\n" + context
+
+    # Build proper message history for follow-up turns
+    # Truncate long assistant messages (the full analysis) to avoid token overload
+    history_messages: list[dict] = []
+    if is_followup:
+        recent = messages[-12:]  # last 6 turns
+        for m in recent:
+            role = m.get("role", "user")
+            if role not in ("user", "assistant"):
+                continue
+            content = str(m.get("content", ""))
+            # Truncate the big initial analysis response — agent only needs a summary
+            if role == "assistant" and len(content) > 1200:
+                content = content[:1200] + "\n\n[... earlier analysis truncated for context ...]"
+            history_messages.append({"role": role, "content": content})
 
     try:
         agent = Agent(
             model=Gemini(id=_model_id(), api_key=GEMINI_API_KEY),
-            description=_build_system_prompt(),
+            description=system,
             markdown=True,
             stream=True,
             add_datetime_to_context=True,
             timezone_identifier="Asia/Kolkata",
         )
 
-        for chunk in agent.run(full_user_message, stream=True, stream_events=True):
+        run_kwargs: dict = {"stream": True, "stream_events": True}
+        if history_messages:
+            run_kwargs["messages"] = history_messages
+
+        for chunk in agent.run(user_message, **run_kwargs):
             if chunk.event == RunEvent.run_content:
                 token = chunk.content or ""
                 if token:
@@ -71,7 +91,7 @@ def stream_tax_analysis(
 
     except Exception as e:
         logger.error(f"tax_analysis_agent: stream_tax_analysis error: {e}", exc_info=True)
-        yield "I had trouble analysing your documents. This is usually a temporary issue — please try again."
+        yield "I had trouble with that. Please try again."
 
 
 def _build_system_prompt() -> str:
@@ -171,7 +191,18 @@ Formatting rules:
 - Do not invent actions. If there is nothing worth doing, say that plainly.
 </output_instructions>
 
+<followup_behaviour>
+If there is conversation history before the current message, the user is asking a follow-up
+question about the analysis you already gave. In that case:
+- Answer only what they asked. Do not repeat the full analysis.
+- Be concise — 2–5 sentences for simple questions, a short paragraph for complex ones.
+- You may use a small table or bullet list if it helps clarity, but keep it tight.
+- Reference specific numbers from their documents where relevant.
+- Do NOT rerun the full output_format sections. No ## headers unless genuinely needed.
+</followup_behaviour>
+
 <output_format>
+(Only use this full format for the initial analysis, not for follow-up questions.)
 
 ---
 
