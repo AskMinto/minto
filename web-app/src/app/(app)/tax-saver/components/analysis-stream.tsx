@@ -279,10 +279,10 @@ interface ParsedAction {
   action_type: ActionType;
   priority: "HIGH" | "MEDIUM" | "LOW";
   instrument_name: string;
-  current_pnl: string;
-  tax_saving_estimate: string;
-  rationale: string;
-  suggested_deadline: string;
+  do_this: string;
+  you_save: string;
+  why: string;
+  deadline: string;
   caveat: string;
 }
 
@@ -300,29 +300,97 @@ const PRIORITY_BADGE: Record<string, string> = {
   LOW:    "bg-slate-500/15 text-slate-500 border border-slate-500/20",
 };
 
+// Map plain-English action labels the agent writes → ActionType enum
+const ACTION_TYPE_MAP: Record<string, ActionType> = {
+  "sell to book a loss":  "HARVEST_LOSS",
+  "harvest loss":         "HARVEST_LOSS",
+  "harvest_loss":         "HARVEST_LOSS",
+  "sell and rebuy":       "BOOK_LTCG_EXEMPTION",
+  "book ltcg exemption":  "BOOK_LTCG_EXEMPTION",
+  "book_ltcg_exemption":  "BOOK_LTCG_EXEMPTION",
+  "don't sell yet":       "AVOID_SELL",
+  "avoid sell":           "AVOID_SELL",
+  "avoid_sell":           "AVOID_SELL",
+  "wait":                 "UPGRADE_TERM",
+  "wait x more months":   "UPGRADE_TERM",
+  "upgrade term":         "UPGRADE_TERM",
+  "upgrade_term":         "UPGRADE_TERM",
+  "elss unlock coming":   "ELSS_REMINDER",
+  "elss unlock":          "ELSS_REMINDER",
+  "elss":                 "ELSS_REMINDER",
+  "elss_reminder":        "ELSS_REMINDER",
+};
+
+function resolveActionType(raw: string): ActionType {
+  const lower = raw.toLowerCase().trim();
+  // Direct lookup
+  if (ACTION_TYPE_MAP[lower]) return ACTION_TYPE_MAP[lower];
+  // Partial match
+  for (const [key, type] of Object.entries(ACTION_TYPE_MAP)) {
+    if (lower.includes(key)) return type;
+  }
+  return "HARVEST_LOSS";
+}
+
 /**
- * Parse action rows from a markdown table in the ACTION PLAN section.
- * Handles the pipe table format the agent outputs.
+ * Parse action cards from the new ### heading format:
+ *
+ *   ### [Sell to book a loss] — Kotak Small Cap Fund `HIGH`
+ *   **Do this:** Sell your entire holding...
+ *   **You save:** ₹4,200
+ *   **Why it works:** Your ₹21,000 loss offsets...
+ *   **You have 6 days.**
+ *   > ⚠️ Exit load of 1% applies...
+ *
+ * Falls back gracefully — if parsing yields nothing, caller renders raw markdown.
  */
-function parseActionTable(sectionContent: string): ParsedAction[] {
-  const lines = sectionContent.split("\n").filter(l => l.trim().startsWith("|"));
-  if (lines.length < 3) return []; // need header + separator + at least one row
+function parseActionCards(sectionContent: string): ParsedAction[] {
+  // Split on ### boundaries (each action starts with ###)
+  const cardBlocks = sectionContent.split(/^###\s+/m).filter(b => b.trim());
 
-  const headers = lines[0].split("|").map(h => h.trim().toLowerCase().replace(/\s+/g, "_")).filter(Boolean);
-  const rows = lines.slice(2); // skip header and separator
+  return cardBlocks.map(block => {
+    const lines = block.split("\n");
+    const heading = lines[0].trim();
 
-  return rows.map(row => {
-    const cells = row.split("|").map(c => c.trim()).filter(Boolean);
-    const get = (key: string) => cells[headers.indexOf(key)] ?? "";
+    // heading: "[Action Label] — Instrument Name `PRIORITY`"
+    // or:      "ACTION_TYPE — Instrument Name `PRIORITY`"
+    const priorityMatch = heading.match(/`(HIGH|MEDIUM|LOW)`/i);
+    const priority = (priorityMatch?.[1]?.toUpperCase() ?? "MEDIUM") as ParsedAction["priority"];
+
+    // Strip priority badge from heading
+    const headingClean = heading.replace(/`(HIGH|MEDIUM|LOW)`/gi, "").trim();
+
+    // Split on " — " to get action label and instrument name
+    const dashIdx = headingClean.indexOf(" — ");
+    const actionRaw = dashIdx > 0 ? headingClean.slice(0, dashIdx).replace(/[\[\]]/g, "").trim() : "";
+    const instrument = dashIdx > 0 ? headingClean.slice(dashIdx + 3).trim() : headingClean;
+
+    const action_type = resolveActionType(actionRaw);
+
+    // Extract labelled fields from the card body
+    const getField = (label: string): string => {
+      const re = new RegExp(`\\*\\*${label}[:\\s]*\\*\\*\\s*(.+?)(?=\\n|$)`, "i");
+      const m = block.match(re);
+      return m?.[1]?.trim() ?? "";
+    };
+
+    // "You have X days." is embedded in body as a standalone line, not a labelled field
+    const deadlineMatch = block.match(/You have (\d+) days?\.([^\n]*)/i);
+    const deadline = deadlineMatch ? `You have ${deadlineMatch[1]} days.${deadlineMatch[2]}`.trim() : "";
+
+    // Blockquote "> ⚠️ ..." is the caveat
+    const caveatMatch = block.match(/^>\s*[⚠️]?\s*(.+)/m);
+    const caveat = caveatMatch?.[1]?.trim() ?? "";
+
     return {
-      action_type: (get("action_type").replace(/\*\*/g, "") || "HARVEST_LOSS") as ActionType,
-      priority: (get("priority").replace(/\*\*/g, "").toUpperCase() || "MEDIUM") as ParsedAction["priority"],
-      instrument_name: get("instrument_name").replace(/\*\*/g, ""),
-      current_pnl: get("current_pnl"),
-      tax_saving_estimate: get("tax_saving_estimate"),
-      rationale: get("rationale"),
-      suggested_deadline: get("suggested_deadline"),
-      caveat: get("caveat"),
+      action_type,
+      priority,
+      instrument_name: instrument,
+      do_this:  getField("Do this"),
+      you_save: getField("You save"),
+      why:      getField("Why it works"),
+      deadline,
+      caveat,
     };
   }).filter(a => a.instrument_name);
 }
@@ -333,18 +401,19 @@ function ActionCard({ action }: { action: ParsedAction }) {
 
   return (
     <div className={`rounded-xl border p-4 mb-3 ${meta.colour}`}>
-      <div className="flex items-start justify-between gap-3 mb-2">
+      {/* Header row */}
+      <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2 min-w-0">
-          <span className={`shrink-0 p-1 rounded-full ${meta.colour}`}>{meta.icon}</span>
+          <span className={`shrink-0 p-1.5 rounded-full ${meta.colour}`}>{meta.icon}</span>
           <div className="min-w-0">
-            <span className="text-[11px] font-semibold uppercase tracking-wide opacity-70">{meta.label}</span>
-            <p className="text-[14px] font-semibold truncate">{action.instrument_name}</p>
+            <span className="text-[11px] font-semibold uppercase tracking-wide opacity-60">{meta.label}</span>
+            <p className="text-[14px] font-semibold leading-snug">{action.instrument_name}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          {action.tax_saving_estimate && (
+          {action.you_save && (
             <span className="text-[12px] font-semibold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full whitespace-nowrap">
-              Save {action.tax_saving_estimate}
+              {action.you_save.startsWith("₹") ? `Save ${action.you_save}` : action.you_save}
             </span>
           )}
           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase ${priorityClass}`}>
@@ -352,20 +421,26 @@ function ActionCard({ action }: { action: ParsedAction }) {
           </span>
         </div>
       </div>
-      {action.current_pnl && (
-        <p className="text-[12px] opacity-70 mb-1.5">
-          Unrealised P&L: <span className={action.current_pnl.includes("-") ? "text-red-500 font-medium" : "text-emerald-600 font-medium"}>{action.current_pnl}</span>
-        </p>
+
+      {/* Action */}
+      {action.do_this && (
+        <p className="text-[13px] font-medium leading-relaxed mb-2">{action.do_this}</p>
       )}
-      <p className="text-[13px] leading-relaxed mb-1.5">{action.rationale}</p>
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        {action.suggested_deadline && (
-          <span className="flex items-center gap-1 text-[11px] opacity-60">
-            <Clock size={10} /> {action.suggested_deadline}
+
+      {/* Reasoning */}
+      {action.why && (
+        <p className="text-[13px] leading-relaxed opacity-80 mb-2">{action.why}</p>
+      )}
+
+      {/* Footer: deadline + caveat */}
+      <div className="flex flex-col gap-1 mt-1">
+        {action.deadline && (
+          <span className="flex items-center gap-1.5 text-[12px] opacity-60">
+            <Clock size={11} /> {action.deadline}
           </span>
         )}
         {action.caveat && (
-          <span className="text-[11px] opacity-60 italic">{action.caveat}</span>
+          <span className="text-[12px] opacity-60 italic">⚠️ {action.caveat}</span>
         )}
       </div>
     </div>
@@ -412,17 +487,19 @@ function TaxAnalysisContent({ content, isStreaming }: { content: string; isStrea
   return (
     <div className="space-y-1">
       {sections.map((section, i) => {
-        const isActionPlan = section.title.includes("ACTION");
-        const isTaxSummary = section.title.includes("TAX SUMMARY") || section.title.includes("SUMMARY");
-        const isDeadline = section.title.includes("DEADLINE");
+        // Match section titles from the new prompt's ## headings
+        const isPortfolioOverview = section.title.includes("PORTFOLIO") || section.title.includes("WHAT'S IN");
+        const isActionPlan = section.title.includes("ACTION") || section.title.includes("WHAT YOU SHOULD") || section.title.includes("MARCH 31") && section.title.includes("SHOULD");
+        const isTaxSummary = section.title.includes("TAX PICTURE") || section.title.includes("TAX SUMMARY") || section.title.includes("RIGHT NOW");
+        const isDeadline = section.title.includes("TIME LEFT") || section.title.includes("DEADLINE");
 
         if (isActionPlan) {
-          const actions = parseActionTable(section.content);
+          const actions = parseActionCards(section.content);
           return (
             <div key={i} className="glass-card rounded-2xl p-4 mb-3">
               <h2 className="text-[14px] font-semibold text-minto-text mb-3 pb-1.5 border-b border-minto-accent/25 flex items-center gap-2">
                 <CheckCircle size={14} className="text-minto-accent" />
-                Action Plan
+                What you should do before March 31
               </h2>
               {actions.length > 0
                 ? actions.map((a, j) => <ActionCard key={j} action={a} />)
@@ -435,7 +512,18 @@ function TaxAnalysisContent({ content, isStreaming }: { content: string; isStrea
           return (
             <div key={i} className="glass-card rounded-2xl p-4 mb-3">
               <h2 className="text-[14px] font-semibold text-minto-text mb-3 pb-1.5 border-b border-minto-accent/25">
-                📊 Tax Summary
+                📊 Your tax picture right now
+              </h2>
+              <TaxMarkdown content={section.content} />
+            </div>
+          );
+        }
+
+        if (isPortfolioOverview) {
+          return (
+            <div key={i} className="glass-card rounded-2xl p-4 mb-3">
+              <h2 className="text-[14px] font-semibold text-minto-text mb-3 pb-1.5 border-b border-minto-accent/25">
+                📁 What's in your portfolio
               </h2>
               <TaxMarkdown content={section.content} />
             </div>
@@ -445,7 +533,7 @@ function TaxAnalysisContent({ content, isStreaming }: { content: string; isStrea
         if (isDeadline) {
           return (
             <div key={i} className="rounded-2xl border border-amber-400/30 bg-amber-400/8 px-4 py-3 mb-3">
-              <TaxMarkdown content={`## ${section.title}\n${section.content}`} />
+              <TaxMarkdown content={section.content} />
             </div>
           );
         }
