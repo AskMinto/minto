@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Iterator
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +27,49 @@ logger = logging.getLogger(__name__)
 def _model_id() -> str:
     from ..core.model_config import model_config
     return model_config._data.get("tax_web_agent", {}).get("model", "gemini-3-flash-preview")
+
+
+def stream_tax_analysis(
+    user_message: str,
+    intake_answers: dict,
+    tax_docs: dict,
+    messages: list[dict],
+) -> Iterator[str]:
+    """Run the tax analysis agent with true streaming — yields tokens as Gemini produces them.
+
+    Uses the same agent.run(stream=True, stream_events=True) + RunEvent.run_content
+    pattern as research_agent.py. No fake word-splitting; tokens arrive in real time.
+    """
+    from agno.agent import Agent, RunEvent
+    from agno.models.google import Gemini
+    from ..core.config import GEMINI_API_KEY
+
+    context = _build_context(intake_answers, tax_docs)
+    history = _build_history_context(messages)
+
+    full_user_message = ""
+    if history:
+        full_user_message += history + "\n\n"
+    full_user_message += "## CONTEXT\n" + context + "\n\n"
+    full_user_message += "## USER MESSAGE\n" + user_message
+
+    try:
+        agent = Agent(
+            model=Gemini(id=_model_id(), api_key=GEMINI_API_KEY),
+            description=_build_system_prompt(),
+            markdown=True,
+            stream=True,
+        )
+
+        for chunk in agent.run(full_user_message, stream=True, stream_events=True):
+            if chunk.event == RunEvent.run_content:
+                token = chunk.content or ""
+                if token:
+                    yield token
+
+    except Exception as e:
+        logger.error(f"tax_analysis_agent: stream_tax_analysis error: {e}", exc_info=True)
+        yield "I had trouble analysing your documents. This is usually a temporary issue — please try again."
 
 
 def _build_system_prompt() -> str:

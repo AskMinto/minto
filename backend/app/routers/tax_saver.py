@@ -317,22 +317,56 @@ async def upload_document(
     }
 
 
+def _stream_sse(
+    user_message: str,
+    intake_answers: dict,
+    tax_docs: dict,
+    messages: list[dict],
+    user_id: str,
+):
+    """Synchronous SSE generator using true Agno streaming (RunEvent.run_content).
+
+    Runs in a thread via run_in_executor so it doesn't block the event loop.
+    Yields raw SSE lines (bytes). Saves the full response to DB after streaming.
+    """
+    from ..services.tax_analysis_agent import stream_tax_analysis
+
+    full_content = ""
+    try:
+        for token in stream_tax_analysis(user_message, intake_answers, tax_docs, messages):
+            full_content += token
+            yield f"data: {json.dumps({'type': 'token', 'content': token})}\n\n"
+    except Exception as e:
+        logger.error(f"_stream_sse: error for {user_id}: {e}", exc_info=True)
+        err = "Something went wrong. Please try again."
+        full_content = err
+        yield f"data: {json.dumps({'type': 'token', 'content': err})}\n\n"
+
+    # Persist to message history
+    if full_content:
+        updated_messages = list(messages)
+        updated_messages.append({"role": "user", "content": user_message})
+        updated_messages.append({"role": "assistant", "content": full_content})
+        try:
+            save_tax_saver_session(user_id, intake_answers, tax_docs, updated_messages)
+        except Exception as e:
+            logger.warning(f"_stream_sse: save failed for {user_id}: {e}")
+
+    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+
 @router.post("/analyse")
-async def analyse_stream(
+def analyse_stream(
     user: UserContext = Depends(get_user_context),
 ):
     """SSE stream: run the tax analysis agent on all uploaded documents.
 
-    Returns a streaming response with SSE events:
-      {"type": "token", "content": str}   — text chunks
-      {"type": "done"}                     — end of stream
+    Synchronous route (not async) so the generator can block on the Agno
+    iterator directly — identical pattern to chats.py/send_message_stream.
+    Uses true Agno streaming (RunEvent.run_content) — tokens arrive from
+    Gemini in real time.
     """
-    from ..services.tax_analysis_agent import run_tax_analysis_stream
-
-    loop = asyncio.get_running_loop()
-    intake_answers, tax_docs, messages = await loop.run_in_executor(
-        None, load_tax_saver_session, user.user_id
-    )
+    intake_answers, tax_docs, messages = load_tax_saver_session(user.user_id)
 
     if not intake_answers.get("income_slab"):
         raise HTTPException(status_code=400, detail="Please complete the intake questions first.")
@@ -341,45 +375,20 @@ async def analyse_stream(
     if not uploaded:
         raise HTTPException(status_code=400, detail="Please upload at least one document first.")
 
-    async def event_generator():
-        full_content = ""
+    user_message = (
+        "Please analyse my tax documents and give me a complete FY 2025-26 capital gains tax analysis. "
+        "Include:\n"
+        "1. Summary of realised LTCG, STCG, LTCL, STCL from my documents\n"
+        "2. Step-by-step netting (Sections 70, 71, 72, 112A)\n"
+        "3. Final tax liability estimate\n"
+        "4. Loss harvesting opportunities (positions I should sell to book losses)\n"
+        "5. Gains harvesting opportunities (LTCG I can book tax-free within ₹1.25L exemption)\n"
+        "6. Specific actions before March 31, 2026\n"
+        "Please be specific with rupee amounts from my actual documents."
+    )
 
-        user_message = (
-            "Please analyse my tax documents and give me a complete FY 2025-26 capital gains tax analysis. "
-            "Include:\n"
-            "1. Summary of realised LTCG, STCG, LTCL, STCL from my documents\n"
-            "2. Step-by-step netting (Sections 70, 71, 72, 112A)\n"
-            "3. Final tax liability estimate\n"
-            "4. Loss harvesting opportunities (positions I should sell to book losses)\n"
-            "5. Gains harvesting opportunities (LTCG I can book tax-free within ₹1.25L exemption)\n"
-            "6. Specific actions before March 31, 2026\n"
-            "Please be specific with rupee amounts from my actual documents."
-        )
-
-        try:
-            async for chunk in run_tax_analysis_stream(
-                user_message=user_message,
-                intake_answers=intake_answers,
-                tax_docs=uploaded,
-                messages=messages,
-            ):
-                full_content += chunk
-                yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
-        except Exception as e:
-            logger.error(f"analyse_stream: error for {user.user_id}: {e}", exc_info=True)
-            error_chunk = "Something went wrong during analysis. Please try again."
-            full_content = error_chunk
-            yield f"data: {json.dumps({'type': 'token', 'content': error_chunk})}\n\n"
-
-        # Save the analysis message to history
-        if full_content:
-            messages.append({"role": "user", "content": "[ANALYSIS REQUEST]"})
-            messages.append({"role": "assistant", "content": full_content})
-            await loop.run_in_executor(
-                None, save_tax_saver_session, user.user_id, intake_answers, tax_docs, messages
-            )
-
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+    def event_generator():
+        yield from _stream_sse(user_message, intake_answers, uploaded, messages, user.user_id)
 
     return StreamingResponse(
         event_generator(),
@@ -393,54 +402,20 @@ async def analyse_stream(
 
 
 @router.post("/chat")
-async def chat_stream(
+def chat_stream(
     body: ChatMessageRequest,
     user: UserContext = Depends(get_user_context),
 ):
-    """SSE stream: follow-up chat with full tax_docs context.
-
-    The agent can reference any data from the uploaded documents to answer
-    follow-up questions. Returns SSE token events.
-    """
-    from ..services.tax_analysis_agent import run_tax_analysis_stream
-
-    loop = asyncio.get_running_loop()
-    intake_answers, tax_docs, messages = await loop.run_in_executor(
-        None, load_tax_saver_session, user.user_id
-    )
+    """SSE stream: follow-up chat referencing uploaded tax documents."""
+    intake_answers, tax_docs, messages = load_tax_saver_session(user.user_id)
 
     if not intake_answers.get("income_slab"):
         raise HTTPException(status_code=400, detail="Please complete the intake questions first.")
 
     uploaded = {k: v for k, v in tax_docs.items() if v is not None}
 
-    async def event_generator():
-        full_content = ""
-
-        try:
-            async for chunk in run_tax_analysis_stream(
-                user_message=body.content,
-                intake_answers=intake_answers,
-                tax_docs=uploaded,
-                messages=messages,
-            ):
-                full_content += chunk
-                yield f"data: {json.dumps({'type': 'token', 'content': chunk})}\n\n"
-        except Exception as e:
-            logger.error(f"chat_stream: error for {user.user_id}: {e}", exc_info=True)
-            error_chunk = "Something went wrong. Please try again."
-            full_content = error_chunk
-            yield f"data: {json.dumps({'type': 'token', 'content': error_chunk})}\n\n"
-
-        # Save to history
-        if full_content:
-            messages.append({"role": "user", "content": body.content})
-            messages.append({"role": "assistant", "content": full_content})
-            await loop.run_in_executor(
-                None, save_tax_saver_session, user.user_id, intake_answers, tax_docs, messages
-            )
-
-        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+    def event_generator():
+        yield from _stream_sse(body.content, intake_answers, uploaded, messages, user.user_id)
 
     return StreamingResponse(
         event_generator(),
