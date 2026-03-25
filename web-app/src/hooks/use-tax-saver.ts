@@ -197,43 +197,52 @@ export function useTaxSaver() {
     setMessages([{ role: "assistant", content: "" }]);
 
     let streamedContent = "";
-    let gotDone = false;
 
-    try {
+    const tryStream = async () => {
       await apiStream(
         "/tax-saver/analyse",
         {},
         (event) => {
           if (event.type === "token" && typeof event.content === "string") {
             streamedContent += event.content;
-            const updated = streamedContent;
-            setMessages([{ role: "assistant", content: updated }]);
+            setMessages([{ role: "assistant", content: streamedContent }]);
           } else if (event.type === "done") {
-            gotDone = true;
             setPhase("done");
           }
         }
       );
-    } catch (e) {
-      // Stream connection error — if we already got content, stay on the
-      // analysis screen so the user can still see what was streamed.
-      if (streamedContent) {
-        setPhase("done");
-      } else {
-        setMessages([
-          {
-            role: "assistant",
-            content: "Something went wrong during analysis. Please try again.",
-          },
-        ]);
-        // Stay on analysing phase with the error message visible, not upload
-        setPhase("done");
+    };
+
+    try {
+      await tryStream();
+    } catch {
+      // Stream dropped (proxy timeout) — check if the backend saved the result anyway
+      if (!streamedContent) {
+        try {
+          const data = await apiGet<{ messages: ChatMessage[] }>("/tax-saver/messages");
+          const saved = data.messages ?? [];
+          // Find the last assistant message — that's the analysis
+          const lastAssistant = [...saved].reverse().find((m) => m.role === "assistant");
+          if (lastAssistant?.content) {
+            streamedContent = lastAssistant.content;
+            setMessages(saved);
+          }
+        } catch {
+          // ignore — fallthrough to error state below
+        }
       }
+
+      if (!streamedContent) {
+        setMessages([{
+          role: "assistant",
+          content: "The analysis is taking longer than expected — please reload the page to see if it completed.",
+        }]);
+      }
+
+      setPhase("done");
     } finally {
-      // If stream ended without a done event but we got content, still show it
-      if (!gotDone && streamedContent) {
-        setPhase("done");
-      }
+      // If stream ended without "done" event but we have content, show it
+      if (streamedContent) setPhase("done");
       setSending(false);
     }
   }, [sending]);

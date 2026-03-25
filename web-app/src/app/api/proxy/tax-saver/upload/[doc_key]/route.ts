@@ -10,20 +10,33 @@
  * The ?password= query param is forwarded as-is to the backend.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+/**
+ * Dedicated proxy for POST /api/proxy/tax-saver/upload/[doc_key]
+ *
+ * PDF extraction via Gemini File API takes 60-120s for large CAS PDFs.
+ * The generic rewrite has no timeout control — Cloud Run drops the connection
+ * before FastAPI finishes, causing a false 500 even though the backend
+ * successfully saves the extracted text to the database.
+ *
+ * Fix: maxDuration=300 + stream the response body directly (no buffering).
+ * Buffering via response.json() holds the connection open waiting for the
+ * complete JSON before returning — same timeout problem. Streaming the body
+ * passes bytes through as they arrive, keeping the connection alive.
+ */
+
+import { NextRequest } from "next/server";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
-async function handler(
+export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ doc_key: string }> }
-): Promise<NextResponse> {
+): Promise<Response> {
   const { doc_key } = await params;
   const backendUrl =
     process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
-  // Preserve the ?password= query param if present
   const searchParams = request.nextUrl.searchParams.toString();
   const targetUrl = `${backendUrl}/tax-saver/upload/${doc_key}${searchParams ? `?${searchParams}` : ""}`;
 
@@ -35,18 +48,15 @@ async function handler(
 
   const bodyBuffer = await request.arrayBuffer();
 
-  const response = await fetch(targetUrl, {
+  const upstream = await fetch(targetUrl, {
     method: "POST",
     headers,
     body: bodyBuffer,
   });
 
-  // Stream the response body directly — do NOT buffer with response.json().
-  // Buffering causes a Cloud Run proxy timeout for large CAS PDFs that take
-  // 30-90s through Gemini, because the minto-web service has its own upstream
-  // timeout. Streaming keeps the connection alive for the full maxDuration.
-  const data = await response.json();
-  return NextResponse.json(data, { status: response.status });
+  // Stream directly — no buffering, no timeout racing
+  return new Response(upstream.body, {
+    status: upstream.status,
+    headers: { "Content-Type": "application/json" },
+  });
 }
-
-export { handler as POST };
