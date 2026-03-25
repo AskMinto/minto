@@ -156,8 +156,24 @@ export function useTaxSaver() {
         });
 
         if (!response.ok) {
-          const text = await response.text();
-          return { status: "error", message: text || "Upload failed." };
+          // For PDFs the Gemini extraction takes 30-90s — the Cloud Run proxy
+          // can timeout and return 500 even though the backend succeeded and
+          // saved the result to the DB. Poll /tax-saver/docs until the doc
+          // appears (up to 2 minutes) before giving up with an error.
+          if (docKey.endsWith("_pdf") || docKey === "cas_pdf" || docKey === "itr_pdf") {
+            const found = await pollUntilDocUploaded(docKey, 120, 5);
+            if (found) {
+              const docData = await apiGet<{
+                doc_instructions: DocInstruction[];
+                all_uploaded: boolean;
+              }>("/tax-saver/docs");
+              setDocInstructions(docData.doc_instructions || []);
+              setAllUploaded(docData.all_uploaded);
+              return { status: "extracted", doc_key: docKey, preview: "" };
+            }
+          }
+          const text = await response.text().catch(() => "");
+          return { status: "error", message: text || "Upload failed. Please try again." };
         }
 
         const result: UploadResult = await response.json();
@@ -348,6 +364,29 @@ export function useTaxSaver() {
     goToUpload,
     refreshDocs,
   };
+}
+
+// Poll GET /tax-saver/docs until doc_key appears as uploaded, or timeout.
+// Used for PDF uploads where the Gemini extraction outlasts the proxy timeout.
+async function pollUntilDocUploaded(
+  docKey: string,
+  timeoutSecs: number,
+  intervalSecs: number
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutSecs * 1000;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, intervalSecs * 1000));
+    try {
+      const data = await apiGet<{ doc_instructions: { doc_key: string; uploaded: boolean }[] }>(
+        "/tax-saver/docs"
+      );
+      const doc = (data.doc_instructions || []).find((d) => d.doc_key === docKey);
+      if (doc?.uploaded) return true;
+    } catch {
+      // network blip — keep trying
+    }
+  }
+  return false;
 }
 
 // Helper to get the Supabase token

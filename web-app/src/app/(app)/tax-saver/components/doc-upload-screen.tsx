@@ -181,9 +181,40 @@ function DocCard({
       setNeedsPassword(false);
       setPassword("");
       setExpanded(false);
+    }
+    // "error" from the hook already handled polling internally for PDFs —
+    // just refresh once here to pick up any late save
+    if (result.status === "error") {
+      setRecovering(true);
+      await onRefreshDocs();
+      setRecovering(false);
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setPendingFile(file);
+    const pwd = showPasswordUpfront ? upfrontPassword : undefined;
+    await doUpload(file, pwd || undefined);
+  };
+
+  const handlePasswordSubmit = async () => {
+    if (!pendingFile || !password.trim()) return;
+    setPasswordError("");
+
+    const result = await onUpload(doc.doc_key, pendingFile, password);
+    setUploadResult(result);
+
+    if (result.status === "wrong_password") {
+      setPasswordError(result.message || "Incorrect password. Please try again.");
+    } else if (result.status === "extracted") {
+      setNeedsPassword(false);
+      setPassword("");
+      setExpanded(false);
     } else if (result.status === "error") {
       setRecovering(true);
-      await new Promise((r) => setTimeout(r, 2000));
       await onRefreshDocs();
       setRecovering(false);
     }
@@ -320,10 +351,14 @@ function DocCard({
           )}
 
           {/* Upload result messages */}
-          {recovering && (
+          {(recovering || (isUploading && (doc.doc_key.endsWith("_pdf")))) && !doc.uploaded && (
             <div className="mb-4 flex items-center gap-2 p-3 bg-amber-50/60 rounded-xl border border-amber-200/50">
               <Loader2 size={13} className="text-amber-600 animate-spin" />
-              <p className="text-xs text-amber-800">Checking if upload succeeded...</p>
+              <p className="text-xs text-amber-800">
+                {recovering
+                  ? "Extracting tables from PDF via Gemini — this can take up to 90 seconds..."
+                  : "Uploading..."}
+              </p>
             </div>
           )}
           {!recovering && uploadResult && uploadResult.status === "likely_invalid" && (
