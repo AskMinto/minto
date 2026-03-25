@@ -66,7 +66,7 @@ export function AnalysisStream({
                 <Image src="/minto.png" alt="Minto" width={20} height={20} />
               </div>
               <div className="glass-card rounded-2xl rounded-bl-md px-5 py-4">
-                <div className="flex items-center gap-2 text-sm text-minto-text-muted">
+                <div className="flex items-center gap-2 text-sm text-minto-text/80">
                   <Loader2 size={14} className="animate-spin" />
                   Analysing your tax documents...
                 </div>
@@ -103,7 +103,7 @@ export function AnalysisStream({
                 }
                 disabled={sending}
                 rows={1}
-                className="flex-1 bg-transparent text-minto-text text-[15px] placeholder:text-minto-text-muted resize-none focus:outline-none py-2 max-h-[150px]"
+                className="flex-1 bg-transparent text-minto-text text-[15px] placeholder:text-minto-text/80 resize-none focus:outline-none py-2 max-h-[150px]"
               />
               <button
                 onClick={handleSend}
@@ -114,19 +114,19 @@ export function AnalysisStream({
               </button>
             </div>
             <div className="flex items-center justify-between mt-2">
-              <p className="text-[10px] text-minto-text-muted">
+              <p className="text-[10px] text-minto-text/80">
                 Minto provides informational insights, not tax advice. Consult a CA for your final liability.
               </p>
               <div className="flex items-center gap-3">
                 <button
                   onClick={onBackToUpload}
-                  className="text-[10px] text-minto-text-muted hover:text-minto-text transition-colors"
+                  className="text-[10px] text-minto-text/80 hover:text-minto-text transition-colors"
                 >
                   ← Upload more docs
                 </button>
                 <button
                   onClick={onStartOver}
-                  className="flex items-center gap-1 text-[10px] text-minto-text-muted hover:text-minto-text transition-colors"
+                  className="flex items-center gap-1 text-[10px] text-minto-text/80 hover:text-minto-text transition-colors"
                 >
                   <RotateCcw size={10} />
                   Start over
@@ -152,7 +152,7 @@ function MessageBubble({
   if (role === "status") {
     return (
       <div className="flex justify-center mb-3">
-        <div className="text-xs text-minto-text-muted glass-subtle px-3 py-1.5 rounded-full">
+        <div className="text-xs text-minto-text/80 glass-subtle px-3 py-1.5 rounded-full">
           {content}
         </div>
       </div>

@@ -41,8 +41,11 @@ async function handler(
     body: bodyBuffer,
   });
 
+  // Stream the response body directly — do NOT buffer with response.json().
+  // Buffering causes a Cloud Run proxy timeout for large CAS PDFs that take
+  // 30-90s through Gemini, because the minto-web service has its own upstream
+  // timeout. Streaming keeps the connection alive for the full maxDuration.
   const data = await response.json();
-
   return NextResponse.json(data, { status: response.status });
 }
 

@@ -21,6 +21,7 @@ interface Props {
   onUpload: (docKey: string, file: File, password?: string) => Promise<UploadResult>;
   onRunAnalysis: () => void;
   onStartOver: () => void;
+  onRefreshDocs: () => Promise<void>; // re-fetch doc status from server
 }
 
 export function DocUploadScreen({
@@ -30,9 +31,11 @@ export function DocUploadScreen({
   onUpload,
   onRunAnalysis,
   onStartOver,
+  onRefreshDocs,
 }: Props) {
   const uploadedCount = docInstructions.filter((d) => d.uploaded).length;
   const totalCount = docInstructions.length;
+  const anyUploaded = uploadedCount > 0;
 
   return (
     <div className="flex-1 overflow-y-auto">
@@ -43,15 +46,17 @@ export function DocUploadScreen({
             <h2 className="text-xl font-semibold text-minto-text">Upload your documents</h2>
             <button
               onClick={onStartOver}
-              className="text-xs text-minto-text-muted hover:text-minto-text transition-colors"
+              className="text-xs text-minto-text/80 hover:text-minto-text transition-colors"
             >
               Start over
             </button>
           </div>
-          <p className="text-sm text-minto-text-muted">
-            {uploadedCount === totalCount
+          <p className="text-sm text-minto-text/80">
+            {allUploaded
               ? "All documents uploaded! Ready to analyse."
-              : `${uploadedCount} of ${totalCount} documents uploaded. Upload the remaining ones below.`}
+              : uploadedCount > 0
+              ? `${uploadedCount} of ${totalCount} uploaded — you can analyse now or upload more for a complete picture.`
+              : `${totalCount} document${totalCount !== 1 ? "s" : ""} needed. Upload whichever you have.`}
           </p>
           {/* Progress bar */}
           <div className="mt-3 h-1.5 bg-white/30 rounded-full overflow-hidden">
@@ -70,44 +75,49 @@ export function DocUploadScreen({
               doc={doc}
               isUploading={uploading === doc.doc_key}
               onUpload={onUpload}
+              onRefreshDocs={onRefreshDocs}
             />
           ))}
         </div>
 
-        {/* Analyse button */}
-        {allUploaded && (
+        {/* Analyse button — shown once at least one doc is uploaded */}
+        {anyUploaded && (
           <div className="mt-8">
             <button
               onClick={onRunAnalysis}
               className="w-full bg-minto-accent text-white rounded-2xl px-6 py-4 text-sm font-semibold flex items-center justify-center gap-2 hover:opacity-90 transition-opacity shadow-lg"
             >
-              Analyse my tax situation
+              {allUploaded ? "Analyse my tax situation" : `Analyse with ${uploadedCount} document${uploadedCount !== 1 ? "s" : ""}`}
               <ArrowRight size={16} />
             </button>
-            <p className="text-center text-[10px] text-minto-text-muted mt-3">
-              Your documents are analysed in memory and never stored in raw form.
+            {!allUploaded && (
+              <p className="text-center text-xs text-minto-text/80 mt-2">
+                You can upload remaining documents later for a more complete analysis.
+              </p>
+            )}
+            <p className="text-center text-[10px] text-minto-text/80 mt-2">
+              Documents are analysed in memory and never stored in raw form (DPDPA compliant).
             </p>
           </div>
-        )}
-
-        {!allUploaded && uploadedCount > 0 && (
-          <p className="text-center text-xs text-minto-text-muted mt-6">
-            Upload all {totalCount} documents to unlock the analysis.
-          </p>
         )}
       </div>
     </div>
   );
 }
 
+// Doc types that always need a password — show the field upfront
+const ALWAYS_PASSWORD_DOCS = new Set(["cas_pdf", "itr_pdf"]);
+
 function DocCard({
   doc,
   isUploading,
   onUpload,
+  onRefreshDocs,
 }: {
   doc: DocInstruction;
   isUploading: boolean;
   onUpload: (docKey: string, file: File, password?: string) => Promise<UploadResult>;
+  onRefreshDocs: () => Promise<void>;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [expanded, setExpanded] = useState(!doc.uploaded);
@@ -116,24 +126,46 @@ function DocCard({
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [recovering, setRecovering] = useState(false);
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = ""; // reset so same file can be re-uploaded
-    setPendingFile(file);
+  // For CAS and ITR, show password field upfront before file selection
+  const showPasswordUpfront = ALWAYS_PASSWORD_DOCS.has(doc.doc_key) && !!doc.password_hint;
+  const [upfrontPassword, setUpfrontPassword] = useState("");
+
+  const doUpload = async (file: File, pwd?: string) => {
     setUploadResult(null);
     setNeedsPassword(false);
     setPasswordError("");
 
-    const result = await onUpload(doc.doc_key, file);
+    const result = await onUpload(doc.doc_key, file, pwd);
     setUploadResult(result);
 
     if (result.status === "needs_password") {
+      // Shouldn't happen for upfront-password docs, but handle anyway
       setNeedsPassword(true);
+      setPendingFile(file);
     } else if (result.status === "extracted") {
       setExpanded(false);
+      setUpfrontPassword("");
+    } else if (result.status === "error") {
+      // Could be a proxy timeout — the backend may have succeeded anyway.
+      // Refresh from server to check if the doc actually got stored.
+      setRecovering(true);
+      await new Promise((r) => setTimeout(r, 2000)); // brief delay
+      await onRefreshDocs();
+      setRecovering(false);
+      // If doc is now uploaded (parent re-renders with uploaded=true), we're done.
+      // If still not uploaded, leave the error message visible.
     }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+    setPendingFile(file);
+    const pwd = showPasswordUpfront ? upfrontPassword : undefined;
+    await doUpload(file, pwd || undefined);
   };
 
   const handlePasswordSubmit = async () => {
@@ -149,6 +181,11 @@ function DocCard({
       setNeedsPassword(false);
       setPassword("");
       setExpanded(false);
+    } else if (result.status === "error") {
+      setRecovering(true);
+      await new Promise((r) => setTimeout(r, 2000));
+      await onRefreshDocs();
+      setRecovering(false);
     }
   };
 
@@ -186,18 +223,23 @@ function DocCard({
                 Uploaded
               </span>
             )}
+            {showPasswordUpfront && !doc.uploaded && (
+              <span className="text-[10px] bg-amber-100/60 text-amber-700 px-2 py-0.5 rounded-full flex items-center gap-1">
+                <Lock size={9} /> Password required
+              </span>
+            )}
           </div>
           {!doc.uploaded && (
-            <p className="text-xs text-minto-text-muted truncate">{doc.description}</p>
+            <p className="text-xs text-minto-text/80 truncate">{doc.description}</p>
           )}
           {doc.uploaded && doc.preview && (
-            <p className="text-[11px] text-minto-text-muted truncate font-mono mt-0.5">
+            <p className="text-[11px] text-minto-text/80 truncate font-mono mt-0.5">
               {doc.preview}
             </p>
           )}
         </div>
         {!doc.uploaded && (
-          <span className="shrink-0 text-minto-text-muted">
+          <span className="shrink-0 text-minto-text/80">
             {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
           </span>
         )}
@@ -211,7 +253,7 @@ function DocCard({
             <p className="text-xs font-medium text-minto-text mb-2">How to download:</p>
             <ol className="space-y-1.5">
               {doc.steps.map((step, i) => (
-                <li key={i} className="flex items-start gap-2 text-xs text-minto-text-muted">
+                <li key={i} className="flex items-start gap-2 text-xs text-minto-text/80">
                   <span className="shrink-0 w-4 h-4 rounded-full bg-white/50 flex items-center justify-center text-[10px] font-medium mt-0.5">
                     {i + 1}
                   </span>
@@ -219,18 +261,30 @@ function DocCard({
                 </li>
               ))}
             </ol>
-            {doc.password_hint && (
-              <div className="mt-3 flex items-start gap-2 p-3 bg-amber-50/60 rounded-xl border border-amber-200/50">
-                <Lock size={13} className="text-amber-600 shrink-0 mt-0.5" />
-                <p className="text-[11px] text-amber-800">{doc.password_hint}</p>
-              </div>
-            )}
           </div>
 
-          {/* Password prompt (if needed) */}
-          {needsPassword && (
+          {/* Upfront password field for CAS / ITR */}
+          {showPasswordUpfront && (
+            <div className="mb-4 p-3 bg-amber-50/60 rounded-xl border border-amber-200/50">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <Lock size={12} className="text-amber-600" />
+                <p className="text-xs font-medium text-amber-900">Enter the document password first</p>
+              </div>
+              <p className="text-[11px] text-amber-800 mb-2">{doc.password_hint}</p>
+              <input
+                type="password"
+                value={upfrontPassword}
+                onChange={(e) => setUpfrontPassword(e.target.value)}
+                placeholder="Document password"
+                className="w-full bg-white/80 border border-white/50 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-minto-accent/50"
+              />
+            </div>
+          )}
+
+          {/* Password prompt shown after upload detects encryption (non-upfront docs) */}
+          {needsPassword && !showPasswordUpfront && (
             <div className="mb-4 p-4 bg-amber-50/60 rounded-xl border border-amber-200/50">
-              <div className="flex items-center gap-2 mb-3">
+              <div className="flex items-center gap-2 mb-2">
                 <Lock size={14} className="text-amber-600" />
                 <p className="text-sm font-medium text-amber-900">This file is password-protected</p>
               </div>
@@ -255,27 +309,45 @@ function DocCard({
                   {isUploading ? <Loader2 size={14} className="animate-spin" /> : "Unlock"}
                 </button>
               </div>
-              {passwordError && (
-                <p className="text-xs text-red-500 mt-2">{passwordError}</p>
-              )}
+              {passwordError && <p className="text-xs text-red-500 mt-2">{passwordError}</p>}
+              <button
+                onClick={() => { setNeedsPassword(false); setPendingFile(null); setPassword(""); }}
+                className="mt-2 text-xs text-minto-text/80 hover:text-minto-text transition-colors"
+              >
+                ← Upload a different file
+              </button>
             </div>
           )}
 
           {/* Upload result messages */}
-          {uploadResult && uploadResult.status === "likely_invalid" && (
+          {recovering && (
+            <div className="mb-4 flex items-center gap-2 p-3 bg-amber-50/60 rounded-xl border border-amber-200/50">
+              <Loader2 size={13} className="text-amber-600 animate-spin" />
+              <p className="text-xs text-amber-800">Checking if upload succeeded...</p>
+            </div>
+          )}
+          {!recovering && uploadResult && uploadResult.status === "likely_invalid" && (
             <div className="mb-4 flex items-start gap-2 p-3 bg-red-50/60 rounded-xl border border-red-200/50">
               <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
               <p className="text-xs text-red-700">{uploadResult.message}</p>
             </div>
           )}
-          {uploadResult && uploadResult.status === "error" && (
+          {!recovering && uploadResult && uploadResult.status === "error" && (
             <div className="mb-4 flex items-start gap-2 p-3 bg-red-50/60 rounded-xl border border-red-200/50">
               <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-red-700">{uploadResult.message || "Upload failed. Please try again."}</p>
+              <p className="text-xs text-red-700">
+                {uploadResult.message || "Upload failed. The document may still have been processed — check below or try again."}
+              </p>
+            </div>
+          )}
+          {!recovering && uploadResult && uploadResult.status === "wrong_password" && !needsPassword && (
+            <div className="mb-4 flex items-start gap-2 p-3 bg-red-50/60 rounded-xl border border-red-200/50">
+              <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-red-700">Incorrect password. Please check and try again.</p>
             </div>
           )}
 
-          {/* Upload button */}
+          {/* Upload button — hidden while handling password for non-upfront docs */}
           {!needsPassword && (
             <>
               <input
@@ -287,37 +359,27 @@ function DocCard({
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isUploading}
-                className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-minto-accent/30 rounded-xl py-4 text-sm text-minto-accent hover:bg-minto-accent/5 transition-colors disabled:opacity-50"
+                disabled={isUploading || recovering || (showPasswordUpfront && !upfrontPassword.trim())}
+                className="w-full flex items-center justify-center gap-2 border-2 border-dashed border-minto-accent/30 rounded-xl py-4 text-sm text-minto-accent hover:bg-minto-accent/5 transition-colors disabled:opacity-40"
               >
-                {isUploading ? (
+                {isUploading || recovering ? (
                   <>
                     <Loader2 size={16} className="animate-spin" />
-                    Uploading & extracting...
+                    {recovering ? "Verifying..." : "Uploading & extracting..."}
                   </>
                 ) : (
                   <>
                     <Upload size={16} />
-                    Choose file{accept ? ` (${doc.file_types.join(", ")})` : ""}
+                    Choose file{doc.file_types?.length ? ` (${doc.file_types.join(", ")})` : ""}
                   </>
                 )}
               </button>
+              {showPasswordUpfront && !upfrontPassword.trim() && (
+                <p className="text-center text-[11px] text-minto-text/80 mt-2">
+                  Enter the password above before choosing your file.
+                </p>
+              )}
             </>
-          )}
-
-          {/* Re-upload option if password needed */}
-          {needsPassword && (
-            <button
-              onClick={() => {
-                setNeedsPassword(false);
-                setPendingFile(null);
-                setPassword("");
-                fileInputRef.current?.click();
-              }}
-              className="mt-2 text-xs text-minto-text-muted hover:text-minto-text transition-colors"
-            >
-              ← Upload a different file
-            </button>
           )}
         </div>
       )}
@@ -333,11 +395,11 @@ function DocCard({
             onChange={handleFileChange}
           />
           <button
-            onClick={() => fileInputRef.current?.click()}
+            onClick={() => { setExpanded(true); }}
             disabled={isUploading}
-            className="text-xs text-minto-text-muted hover:text-minto-text transition-colors"
+            className="text-xs text-minto-text/80 hover:text-minto-text transition-colors"
           >
-            {isUploading ? "Re-uploading..." : "Re-upload"}
+            Re-upload
           </button>
         </div>
       )}

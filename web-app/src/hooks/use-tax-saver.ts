@@ -297,6 +297,19 @@ export function useTaxSaver() {
     setMessages([]);
   }, []);
 
+  const refreshDocs = useCallback(async () => {
+    try {
+      const docData = await apiGet<{
+        doc_instructions: DocInstruction[];
+        all_uploaded: boolean;
+      }>("/tax-saver/docs");
+      setDocInstructions(docData.doc_instructions || []);
+      setAllUploaded(docData.all_uploaded);
+    } catch {
+      // silently fail
+    }
+  }, []);
+
   return {
     phase,
     intakeAnswers,
@@ -311,6 +324,7 @@ export function useTaxSaver() {
     sendFollowUp,
     startOver,
     goToUpload,
+    refreshDocs,
   };
 }
 

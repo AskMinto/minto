@@ -107,6 +107,10 @@ def load_tax_saver_session(user_id: str) -> tuple[dict, dict, list[dict]]:
 
     Returns (intake_answers, tax_docs, messages).
     All three are empty/default if no session exists yet.
+
+    Resilient to migration 011 not yet applied: falls back to selecting only
+    the columns that existed before (session_state, messages) and reconstructs
+    intake_answers / tax_docs from session_state fields if needed.
     """
     try:
         result = (
@@ -125,7 +129,33 @@ def load_tax_saver_session(user_id: str) -> tuple[dict, dict, list[dict]]:
             merged_intake = {**_DEFAULT_INTAKE_ANSWERS, **intake}
             return merged_intake, tax_docs, msgs
     except Exception as e:
-        logger.error(f"web_session_store.load_tax_saver_session failed for {user_id}: {e}")
+        # Migration 011 may not be applied yet — fall back to full row select
+        logger.warning(f"web_session_store.load_tax_saver_session column error, trying fallback: {e}")
+        try:
+            result = (
+                _sb()
+                .table("tax_sessions")
+                .select("session_state, messages")
+                .eq("user_id", user_id)
+                .limit(1)
+                .execute()
+            )
+            if result.data:
+                row = result.data[0]
+                ss = row.get("session_state") or {}
+                msgs = row.get("messages") or []
+                # Best-effort reconstruction from old session_state fields
+                intake = {
+                    "income_slab": ss.get("income_slab") or ss.get("slab_rate"),
+                    "tax_regime": ss.get("tax_regime"),
+                    "brokers": ss.get("brokers") or [],
+                    "has_carry_forward": ss.get("has_carry_forward") or ss.get("carry_forward"),
+                    "financial_year": ss.get("financial_year", "2025-26"),
+                }
+                merged_intake = {**_DEFAULT_INTAKE_ANSWERS, **{k: v for k, v in intake.items() if v is not None}}
+                return merged_intake, {}, msgs
+        except Exception as e2:
+            logger.error(f"web_session_store.load_tax_saver_session fallback also failed for {user_id}: {e2}")
 
     return _DEFAULT_INTAKE_ANSWERS.copy(), {}, []
 

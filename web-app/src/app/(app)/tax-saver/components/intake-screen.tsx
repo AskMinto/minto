@@ -83,7 +83,7 @@ export function IntakeScreen({ onSubmit }: Props) {
           <h1 className="text-2xl font-semibold text-minto-text mb-2">
             Tax Harvesting Analyser
           </h1>
-          <p className="text-minto-text-muted text-sm max-w-md leading-relaxed">
+          <p className="text-minto-text/80 text-sm max-w-md leading-relaxed">
             Answer 4 quick questions and upload your documents. I&apos;ll calculate your FY 2025-26
             capital gains tax and generate a personalised harvest plan before March 31st.
           </p>
@@ -93,7 +93,7 @@ export function IntakeScreen({ onSubmit }: Props) {
               { label: "Upload docs", icon: "📄" },
               { label: "Get your plan", icon: "💰" },
             ].map((s) => (
-              <div key={s.label} className="flex items-center gap-1.5 text-xs text-minto-text-muted">
+              <div key={s.label} className="flex items-center gap-1.5 text-xs text-minto-text/80">
                 <span>{s.icon}</span>
                 <span>{s.label}</span>
               </div>
@@ -146,7 +146,7 @@ export function IntakeScreen({ onSubmit }: Props) {
                       </div>
                     )}
                   </div>
-                  <span className="text-xs text-minto-text-muted">{opt.desc}</span>
+                  <span className="text-xs text-minto-text/80">{opt.desc}</span>
                 </button>
               ))}
             </div>
@@ -177,7 +177,7 @@ export function IntakeScreen({ onSubmit }: Props) {
             question="Do you have capital losses from a previous year carried forward?"
             answered={hasCarryForward !== null}
           >
-            <p className="text-xs text-minto-text-muted mb-3">
+            <p className="text-xs text-minto-text/80 mb-3">
               If you filed ITR-2/ITR-3 last year with capital losses, those can offset this year&apos;s gains.
             </p>
             <div className="flex gap-3">
@@ -224,7 +224,7 @@ export function IntakeScreen({ onSubmit }: Props) {
             )}
           </button>
 
-          <p className="text-center text-[10px] text-minto-text-muted">
+          <p className="text-center text-[10px] text-minto-text/80">
             Raw documents are deleted from servers within 60 seconds of parsing (DPDPA compliant)
           </p>
         </div>
@@ -252,7 +252,7 @@ function QuestionBlock({
             "w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold shrink-0",
             answered
               ? "bg-minto-accent text-white"
-              : "bg-white/50 text-minto-text-muted border border-white/40",
+              : "bg-white/50 text-minto-text/80 border border-white/40",
           ].join(" ")}
         >
           {answered ? <Check size={14} /> : number}

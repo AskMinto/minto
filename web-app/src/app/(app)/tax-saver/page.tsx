@@ -20,6 +20,7 @@ export default function TaxSaverPage() {
     sendFollowUp,
     startOver,
     goToUpload,
+    refreshDocs,
   } = useTaxSaver();
 
   if (phase === "loading") {
@@ -47,6 +48,7 @@ export default function TaxSaverPage() {
         onUpload={uploadDocument}
         onRunAnalysis={runAnalysis}
         onStartOver={startOver}
+        onRefreshDocs={refreshDocs}
       />
     );
   }
