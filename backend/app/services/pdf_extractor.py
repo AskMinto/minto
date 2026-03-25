@@ -31,7 +31,8 @@ def _client():
 
 def _model_id() -> str:
     from ..core.model_config import model_config
-    return model_config._data.get("whatsapp_bot", {}).get("model", "gemini-2.0-flash")
+    # Use Flash for extraction — fast, cheap, handles table extraction well
+    return model_config._data.get("research_agent", {}).get("model", "gemini-2.0-flash")
 
 
 def extract_pdf_tables_sync(pdf_bytes: bytes, filename: str = "document.pdf") -> str:
@@ -69,6 +70,7 @@ def extract_pdf_tables_sync(pdf_bytes: bytes, filename: str = "document.pdf") ->
         return ""
 
     extracted = ""
+    generation_error = None
     try:
         response = client.models.generate_content(
             model=model_id,
@@ -76,12 +78,18 @@ def extract_pdf_tables_sync(pdf_bytes: bytes, filename: str = "document.pdf") ->
         )
         extracted = response.text or ""
     except Exception as e:
+        generation_error = e
         logger.error(f"pdf_extractor_sync: generation failed for {file_ref.name}: {e}")
 
     try:
         client.files.delete(name=file_ref.name)
     except Exception as e:
         logger.warning(f"pdf_extractor_sync: delete failed for {file_ref.name}: {e}")
+
+    if generation_error and not extracted:
+        # Raise so the router can return a meaningful error to the user
+        # rather than silently surfacing as "likely_invalid"
+        raise RuntimeError(f"Gemini table extraction failed: {generation_error}") from generation_error
 
     return extracted
 

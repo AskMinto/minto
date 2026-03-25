@@ -245,7 +245,14 @@ def upload_document(
                 }
 
         # Synchronous Gemini extraction — runs in thread, not cancelled on disconnect
-        extracted = extract_pdf_tables_sync(raw_bytes, filename)
+        try:
+            extracted = extract_pdf_tables_sync(raw_bytes, filename)
+        except RuntimeError as e:
+            logger.error(f"upload_document: Gemini extraction failed for {user.user_id}: {e}")
+            return {
+                "status": "error",
+                "message": "Could not extract data from this PDF. Please try again — this is usually a temporary Gemini API issue.",
+            }
 
     # ── XLSX handling ─────────────────────────────────────────────────────────
     elif _is_xlsx(filename, content_type):
