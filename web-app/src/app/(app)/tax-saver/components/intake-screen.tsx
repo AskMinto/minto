@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import Image from "next/image";
-import { ArrowRight, Check } from "lucide-react";
+import {
+  ArrowRight, Check, ClipboardList, FileText, BarChart3,
+  Building2, TrendingUp, Wallet, MoreHorizontal,
+} from "lucide-react";
 import type { IntakeAnswers } from "@/hooks/use-tax-saver";
 
 interface Props {
@@ -23,17 +26,17 @@ const TAX_REGIMES = [
 ];
 
 // Mutual funds sentinel — selecting this triggers CAS upload
-const MF_OPTION = { label: "Mutual Funds (via CAMS / KFintech)", value: "Mutual Funds (via CAMS/KFintech)", icon: "🏦" };
+const MF_OPTION = { label: "Mutual Funds (via CAMS / KFintech)", value: "Mutual Funds (via CAMS/KFintech)", icon: Building2 };
 
 // Demat brokers — each triggers a Tax P&L + Holdings pair
 const BROKER_OPTIONS = [
-  { label: "Zerodha", value: "Zerodha", icon: "🟡" },
-  { label: "Groww", value: "Groww", icon: "🟢" },
-  { label: "Upstox", value: "Upstox", icon: "🟣" },
-  { label: "Angel One", value: "Angel One", icon: "🔵" },
-  { label: "ICICI Direct", value: "ICICI Direct", icon: "🔴" },
-  { label: "HDFC Securities", value: "HDFC Securities", icon: "🟠" },
-  { label: "Other broker", value: "Other", icon: "📊" },
+  { label: "Zerodha", value: "Zerodha", icon: TrendingUp },
+  { label: "Groww", value: "Groww", icon: TrendingUp },
+  { label: "Upstox", value: "Upstox", icon: TrendingUp },
+  { label: "Angel One", value: "Angel One", icon: TrendingUp },
+  { label: "ICICI Direct", value: "ICICI Direct", icon: Wallet },
+  { label: "HDFC Securities", value: "HDFC Securities", icon: Wallet },
+  { label: "Other broker", value: "Other", icon: MoreHorizontal },
 ];
 
 export function IntakeScreen({ onSubmit }: Props) {
@@ -90,14 +93,14 @@ export function IntakeScreen({ onSubmit }: Props) {
             Answer 4 quick questions and upload your documents. I&apos;ll calculate your FY 2025-26
             capital gains tax and generate a personalised harvest plan before March 31st.
           </p>
-          <div className="flex items-center gap-4 mt-4">
+          <div className="flex items-center gap-5 mt-4">
             {[
-              { label: "4 questions", icon: "📋" },
-              { label: "Upload docs", icon: "📄" },
-              { label: "Get your plan", icon: "💰" },
+              { label: "4 questions", Icon: ClipboardList },
+              { label: "Upload docs", Icon: FileText },
+              { label: "Get your plan", Icon: BarChart3 },
             ].map((s) => (
               <div key={s.label} className="flex items-center gap-1.5 text-xs text-minto-text/80">
-                <span>{s.icon}</span>
+                <s.Icon size={13} className="text-minto-accent/70" />
                 <span>{s.label}</span>
               </div>
             ))}
@@ -312,12 +315,12 @@ function ChipButton({
 }
 
 function MultiChipButton({
-  icon,
+  icon: Icon,
   label,
   selected,
   onClick,
 }: {
-  icon: string;
+  icon: React.ElementType;
   label: string;
   selected: boolean;
   onClick: () => void;
@@ -332,7 +335,7 @@ function MultiChipButton({
           : "bg-white/40 text-minto-text border-white/30 hover:bg-white/60",
       ].join(" ")}
     >
-      <span>{icon}</span>
+      <Icon size={14} className={selected ? "text-minto-accent" : "text-minto-text/60"} />
       <span>{label}</span>
       {selected && <Check size={13} className="ml-0.5" />}
     </button>
