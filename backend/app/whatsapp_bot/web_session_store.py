@@ -4,10 +4,12 @@ Mirrors session_store.py but keyed by user_id (Supabase auth UUID) instead
 of a phone number.  All writes use the service-role client (identical to
 alert_poller.py and session_store.py).
 
-Schema (tax_sessions — migration 008):
+Schema (tax_sessions — migrations 008 + 011):
   user_id         uuid unique    — Supabase auth user ID
   session_state   jsonb          — all onboarding answers, parsed docs, analysis
   messages        jsonb          — last MAX_MESSAGES role/content pairs
+  intake_answers  jsonb          — 3-question intake (income_slab, tax_regime, holdings)
+  tax_docs        jsonb          — doc manifest: keys = doc identifiers, values = extracted text or null
   updated_at      timestamptz    — auto-updated by DB trigger
 """
 
@@ -50,6 +52,20 @@ _DEFAULT_SESSION_STATE: dict = {
     "notification_email": None,
     "blocked": False,
     "block_reason": None,
+    # New fields (migration 011) — tax saver redesign
+    "income_slab": None,
+    "brokers": [],
+    "has_carry_forward": None,
+    "financial_year": "2025-26",
+}
+
+# Default intake_answers — stored as a top-level column (not nested in session_state)
+_DEFAULT_INTAKE_ANSWERS: dict = {
+    "income_slab": None,
+    "tax_regime": None,
+    "brokers": [],
+    "has_carry_forward": None,
+    "financial_year": "2025-26",
 }
 
 
@@ -86,6 +102,34 @@ def load_tax_session(user_id: str) -> tuple[dict, list[dict]]:
     return _DEFAULT_SESSION_STATE.copy(), []
 
 
+def load_tax_saver_session(user_id: str) -> tuple[dict, dict, list[dict]]:
+    """Load intake_answers, tax_docs, and messages for the new tax saver flow.
+
+    Returns (intake_answers, tax_docs, messages).
+    All three are empty/default if no session exists yet.
+    """
+    try:
+        result = (
+            _sb()
+            .table("tax_sessions")
+            .select("intake_answers, tax_docs, messages")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+        if result.data:
+            row = result.data[0]
+            intake = row.get("intake_answers") or {}
+            tax_docs = row.get("tax_docs") or {}
+            msgs = row.get("messages") or []
+            merged_intake = {**_DEFAULT_INTAKE_ANSWERS, **intake}
+            return merged_intake, tax_docs, msgs
+    except Exception as e:
+        logger.error(f"web_session_store.load_tax_saver_session failed for {user_id}: {e}")
+
+    return _DEFAULT_INTAKE_ANSWERS.copy(), {}, []
+
+
 def save_tax_session(
     user_id: str,
     session_state: dict,
@@ -107,6 +151,31 @@ def save_tax_session(
         ).execute()
     except Exception as e:
         logger.error(f"web_session_store.save_tax_session failed for {user_id}: {e}")
+
+
+def save_tax_saver_session(
+    user_id: str,
+    intake_answers: dict,
+    tax_docs: dict,
+    messages: list[dict],
+) -> None:
+    """Upsert intake_answers, tax_docs, and messages for the new tax saver flow.
+
+    Trims messages to the last MAX_MESSAGES entries before saving.
+    """
+    trimmed = messages[-MAX_MESSAGES:]
+    try:
+        _sb().table("tax_sessions").upsert(
+            {
+                "user_id": user_id,
+                "intake_answers": intake_answers,
+                "tax_docs": tax_docs,
+                "messages": trimmed,
+            },
+            on_conflict="user_id",
+        ).execute()
+    except Exception as e:
+        logger.error(f"web_session_store.save_tax_saver_session failed for {user_id}: {e}")
 
 
 def delete_tax_session(user_id: str) -> None:
