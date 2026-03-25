@@ -26,8 +26,7 @@ logger = logging.getLogger(__name__)
 
 def _model_id() -> str:
     from ..core.model_config import model_config
-    # Use the research agent model — same family used everywhere else in production
-    return model_config._data.get("research_agent", {}).get("model", "gemini-2.0-flash")
+    return model_config._data.get("tax_web_agent", {}).get("model", "gemini-3-flash-preview")
 
 
 def _build_system_prompt() -> str:
