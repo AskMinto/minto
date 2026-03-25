@@ -59,6 +59,8 @@ def stream_tax_analysis(
             description=_build_system_prompt(),
             markdown=True,
             stream=True,
+            add_datetime_to_context=True,
+            timezone_identifier="Asia/Kolkata",
         )
 
         for chunk in agent.run(full_user_message, stream=True, stream_events=True):
