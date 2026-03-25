@@ -197,6 +197,7 @@ export function useTaxSaver() {
     setMessages([{ role: "assistant", content: "" }]);
 
     let streamedContent = "";
+    let gotDone = false;
 
     try {
       await apiStream(
@@ -208,19 +209,31 @@ export function useTaxSaver() {
             const updated = streamedContent;
             setMessages([{ role: "assistant", content: updated }]);
           } else if (event.type === "done") {
+            gotDone = true;
             setPhase("done");
           }
         }
       );
     } catch (e) {
-      setMessages([
-        {
-          role: "assistant",
-          content: "Something went wrong during analysis. Please try again.",
-        },
-      ]);
-      setPhase("upload");
+      // Stream connection error — if we already got content, stay on the
+      // analysis screen so the user can still see what was streamed.
+      if (streamedContent) {
+        setPhase("done");
+      } else {
+        setMessages([
+          {
+            role: "assistant",
+            content: "Something went wrong during analysis. Please try again.",
+          },
+        ]);
+        // Stay on analysing phase with the error message visible, not upload
+        setPhase("done");
+      }
     } finally {
+      // If stream ended without a done event but we got content, still show it
+      if (!gotDone && streamedContent) {
+        setPhase("done");
+      }
       setSending(false);
     }
   }, [sending]);

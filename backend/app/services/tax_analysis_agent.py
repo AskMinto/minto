@@ -26,7 +26,8 @@ logger = logging.getLogger(__name__)
 
 def _model_id() -> str:
     from ..core.model_config import model_config
-    return model_config._data.get("tax_web_agent", {}).get("model", "gemini-2.0-flash")
+    # Use the research agent model — same family used everywhere else in production
+    return model_config._data.get("research_agent", {}).get("model", "gemini-2.0-flash")
 
 
 def _build_system_prompt() -> str:
@@ -121,9 +122,12 @@ async def run_tax_analysis_stream(
     """Run the tax analysis agent and yield text tokens as an async generator.
 
     Yields plain text chunks (not SSE-formatted — the router wraps them).
+    Always yields at least one chunk — even on error — so the SSE stream
+    closes gracefully instead of crashing the connection.
     """
     from agno.agent import Agent
     from agno.models.google import Gemini
+    from ..core.config import GEMINI_API_KEY
 
     context = _build_context(intake_answers, tax_docs)
     history = _build_history_context(messages)
@@ -134,32 +138,32 @@ async def run_tax_analysis_stream(
     full_user_message += "## CONTEXT\n" + context + "\n\n"
     full_user_message += "## USER MESSAGE\n" + user_message
 
-    agent = Agent(
-        model=Gemini(id=_model_id()),
-        description=_build_system_prompt(),
-        markdown=True,
-        stream=False,
-    )
-
     full_response = ""
     try:
+        agent = Agent(
+            model=Gemini(id=_model_id(), api_key=GEMINI_API_KEY),
+            description=_build_system_prompt(),
+            markdown=True,
+            stream=False,
+        )
         result = await agent.arun(full_user_message)
         if result and hasattr(result, "content") and result.content:
             full_response = str(result.content)
+        if not full_response:
+            full_response = "Analysis complete — no content was returned. Please try again."
     except Exception as e:
         logger.error(f"tax_analysis_agent: agent error: {e}", exc_info=True)
         full_response = (
-            "I had trouble analysing your documents. Please try again, "
-            "or check that all documents uploaded correctly."
+            "I had trouble analysing your documents. This is usually a temporary issue — "
+            "please try again in a moment."
         )
 
-    # Stream word-by-word
-    if full_response:
-        words = full_response.split(" ")
-        chunk_size = 4
-        for i in range(0, len(words), chunk_size):
-            chunk = " ".join(words[i : i + chunk_size])
-            if i + chunk_size < len(words):
-                chunk += " "
-            yield chunk
-            await asyncio.sleep(0)
+    # Stream word-by-word — always yields something so the SSE connection closes cleanly
+    words = full_response.split(" ")
+    chunk_size = 4
+    for i in range(0, len(words), chunk_size):
+        chunk = " ".join(words[i : i + chunk_size])
+        if i + chunk_size < len(words):
+            chunk += " "
+        yield chunk
+        await asyncio.sleep(0)
