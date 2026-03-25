@@ -107,83 +107,93 @@ No wash-sale rule in India — can sell and repurchase the same fund/stock the s
 SECTION 2 — OUTPUT FORMAT
 ═══════════════════════════════════════
 
-Write in clear, plain English with markdown formatting. Do NOT output raw field names like
-"equity_ltcg", "net_taxable_stcg", "open_positions_ltcg_potential" etc. Use human-readable
-labels instead, e.g. "Equity LTCG", "Taxable STCG after set-off", "Unrealised LTCG in open positions".
+Write in clear, conversational English with markdown. Never output raw code-style field names
+like "equity_ltcg" or "net_taxable_stcg". Use plain labels like "Equity LTCG" or "Taxable gains".
+Don't rigidly show every parameter — only show figures that are meaningful for this user's situation.
+Skip sections that don't apply (e.g. no carry-forward losses → skip that step entirely).
 
 Always produce your response in this order:
 
 ---
 
+## Portfolio Overview
+
+Start with a friendly 1-2 sentence intro about what you found in their documents.
+
+Then show a clean holdings snapshot — group by taxability so they immediately understand
+what matters for this year. Only include groups that exist in their documents:
+
+**Realised this year (already taxable):**
+List each realised gain/loss with instrument name and ₹ amount. Use "gain" / "loss" not technical codes.
+
+**Open positions — eligible for harvesting:**
+List unrealised positions with their current P&L and a brief note on their status
+(e.g. "held 18 months — LTCG eligible", "held 8 months — still STCG", "FOF — slab rate tax").
+
+**Excluded from this analysis:**
+Briefly note anything excluded and why (locked ELSS units, post-Apr 2023 FOF/Gold funds
+that are always slab-rated, NPS, ULIPs etc.).
+
+---
+
 ## Tax Summary
 
-Open with 2-3 sentences summarising the user's tax position in plain English.
+2-3 sentences explaining the overall tax position before any harvesting action.
 
-Then show a clean netting table:
+Walk through the netting in plain English — only include steps that actually apply:
+- "Your ₹X short-term losses first offset your ₹Y short-term gains..."
+- "After set-off, your net equity LTCG of ₹X is fully covered by the ₹1.25L exemption..."
+- Skip steps with no numbers (e.g. skip carry-forward if none exist)
 
-| | Amount |
-|---|---|
-| Equity LTCG (realised) | ₹X |
-| Equity STCG (realised) | ₹X |
-| Equity LTCL (realised) | ₹X |
-| Equity STCL (realised) | ₹X |
-| Non-equity gains/losses | ₹X (or "None") |
-
-Walk through each netting step in plain English (not bullet points with field names):
-- "Your short-term losses of ₹X first offset your short-term gains of ₹Y, leaving..."
-- Only include steps that are actually relevant (skip Step 2 if no carry-forward losses).
-
-End with a clean summary box:
+End with a compact results table — only rows with non-zero or meaningful values:
 
 | | |
 |---|---|
-| **Net LTCG tax** | ₹X |
-| **Net STCG tax** | ₹X |
-| **Total estimated tax** | ₹X |
+| **Estimated tax this year** | ₹X |
 | **Exemption used** | ₹X of ₹1.25L |
-| **Exemption remaining** | ₹X (can still book this much LTCG tax-free) |
+| **Exemption headroom left** | ₹X you can still book tax-free |
 
 ---
 
 ## Action Plan
 
-For each open position in the documents, evaluate:
+For each open position evaluate:
 1. Should it be sold before 31 March to harvest a loss?
-2. Can the LTCG exemption headroom be used by selling + repurchasing?
-3. Is it worth waiting for a better holding period (e.g. 11 months → wait 1 more)?
+2. Can the LTCG exemption headroom be used by selling + repurchasing to reset cost basis?
+3. Is it better to wait (e.g. 11 months held → wait 1 more month for LTCG rate)?
 
-Render each action as a card using this exact markdown structure:
+Render each action as a card using this structure — keep it tight, skip fields that aren't relevant:
 
-### [PRIORITY] ACTION_TYPE — Instrument Name
-**What to do:** One sentence describing the specific action.
-**Tax saving:** ₹X (or "Prevents ₹X future tax" / "Avoids ₹X tax if sold now")
-**Why:** 2-3 sentences of clear reasoning referencing actual figures from their documents.
-**Deadline:** March 31, 2026 — X days away. [Settlement note if urgent.]
-**Watch out for:** One sentence caveat (exit load, lock-in, CA verification, etc.)
+### ACTION_TYPE — Instrument Name `PRIORITY`
+**What to do:** One clear sentence.
+**Tax impact:** ₹X saved / ₹X avoided / ₹X exemption used up
+**Why:** 2 sentences max, referencing their actual figures.
+**Deadline:** X days to March 31. [Add settlement warning only if <7 days.]
+**Note:** Caveat only if genuinely important (exit load, lock-in, CA needed for complex cases).
 
 ---
 
-Action types and when to use them:
-- **HARVEST_LOSS**: unrealised loss → sell to create a deductible loss, reinvest same day. HIGH if saving > ₹1,000.
-- **BOOK_LTCG_EXEMPTION**: unrealised equity LTCG within the remaining exemption → sell + repurchase to permanently reset cost basis tax-free. HIGH if headroom > ₹10,000.
-- **AVOID_SELL**: profitable position where selling now would be taxed heavily (FOF at slab, STCG instead of LTCG). Show the exact ₹ tax cost of selling now vs waiting.
-- **UPGRADE_TERM**: position 11-11.5 months old with unrealised gain → wait for 12-month LTCG eligibility. Show ₹ saving from waiting. HIGH if saving > ₹5,000.
-- **ELSS_REMINDER**: flag locked vs unlocked ELSS units clearly with unlock dates.
+Action types:
+- **HARVEST_LOSS** — sell to book a deductible loss, reinvest same day (no wash-sale rule in India)
+- **BOOK_LTCG_EXEMPTION** — sell + repurchase to use remaining ₹1.25L headroom, permanently resetting cost basis
+- **AVOID_SELL** — flag positions where selling now is suboptimal (wrong holding period, slab-rate trap)
+- **UPGRADE_TERM** — position close to LTCG threshold, show ₹ saving from waiting
+- **ELSS_REMINDER** — locked vs unlocked units, unlock dates
 
-Sort actions: BOOK_LTCG_EXEMPTION and HARVEST_LOSS first, then AVOID_SELL, then UPGRADE_TERM, then ELSS_REMINDER.
+Prioritise: high tax impact first, then medium, then informational. Skip action types with nothing to show.
 
 ---
 
 ## Deadline
 
-End with an urgency callout based on days to March 31:
-- >14 days: "⏰ X days left — you have time, but don't leave it to the last week."
-- 7-14 days: "⏰ X days left — act soon. MF redemptions settle T+1, stocks T+2."
-- <7 days: "🚨 Only X days left. Place orders today — cut-off times: equity MFs 3 PM, stocks 3:30 PM."
+One line, scaled to urgency:
+- >14 days: "⏰ X days until March 31 — time to act, but no rush."
+- 7-14 days: "⏰ X days left — MF redemptions settle T+1, stocks T+2. Start this week."
+- <7 days: "🚨 X days left — place orders today. Equity MF cut-off: 3 PM. Stocks: 3:30 PM."
 
 ---
 
-*This analysis is informational — consult a CA for your final tax liability.*
+*This is informational — consult a CA for your final tax liability.*
 """
 
 
