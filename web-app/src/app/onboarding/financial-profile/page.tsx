@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { CSSProperties } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { apiGet, apiPost } from "@/lib/api";
 import { useAuth } from "@/providers/auth-provider";
 
@@ -1584,6 +1585,17 @@ export default function FinancialProfilePage() {
         ::-webkit-scrollbar { width:4px } ::-webkit-scrollbar-thumb { background:#9fb28f; border-radius:4px }
       `}</style>
 
+      {/* ── Header ── */}
+      <div style={S.header}>
+        <div style={S.headerBrand}>
+          <Image src="/minto.png" alt="Minto" width={30} height={30} style={{ borderRadius: "50%", display: "block" }} />
+          <span style={S.headerTitle}>Minto</span>
+        </div>
+        <div style={S.stepPill}>
+          Step {Math.min(step + 1, STEPS.length)} of {STEPS.length}
+        </div>
+      </div>
+
       <div ref={chatRef} style={S.chatArea}>
         {messages.map((m, i) => (
           <div
@@ -1594,7 +1606,11 @@ export default function FinancialProfilePage() {
               animation: "fadeUp 0.3s ease forwards",
             }}
           >
-            {m.from === "minto" && <div style={S.avatar}>M</div>}
+            {m.from === "minto" && (
+              <div style={S.avatar}>
+                <Image src="/minto.png" alt="Minto" width={28} height={28} style={{ borderRadius: "50%", display: "block" }} />
+              </div>
+            )}
             <div style={m.from === "minto" ? S.mintoMsg : S.userMsg}>
               {m.text.split("\n").map((line, j) => (
                 <p key={j} style={{ margin: "0 0 4px", lineHeight: 1.55 }}>
@@ -1606,7 +1622,9 @@ export default function FinancialProfilePage() {
         ))}
         {typing && (
           <div style={{ ...S.msgWrap, justifyContent: "flex-start" }}>
-            <div style={S.avatar}>M</div>
+            <div style={S.avatar}>
+              <Image src="/minto.png" alt="Minto" width={28} height={28} style={{ borderRadius: "50%", display: "block" }} />
+            </div>
             <div style={S.mintoMsg}>
               <div style={S.dots}>
                 <span style={{ ...S.dot, animation: "dot1 1.4s infinite" }} />
@@ -1644,18 +1662,44 @@ const S: Record<string, CSSProperties> = {
     flexDirection: "column",
     gap: 6,
   },
+  header: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "12px 20px",
+    background: "rgba(255,255,255,0.55)",
+    backdropFilter: "blur(20px)",
+    WebkitBackdropFilter: "blur(20px)",
+    borderBottom: "1px solid rgba(255,255,255,0.4)",
+    flexShrink: 0,
+    zIndex: 10,
+  },
+  headerBrand: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: 700,
+    color: "#2d3a2e",
+    letterSpacing: "-0.3px",
+  },
+  stepPill: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: "#5a6b5c",
+    background: "rgba(255,255,255,0.6)",
+    border: "1px solid rgba(255,255,255,0.5)",
+    borderRadius: 20,
+    padding: "4px 12px",
+  },
   msgWrap: { display: "flex", gap: 8, alignItems: "flex-end", maxWidth: "100%" },
   avatar: {
     width: 28,
     height: 28,
     borderRadius: "50%",
-    background: "#3d5a3e",
-    color: "#f2f5ef",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    fontSize: 12,
-    fontWeight: 700,
+    overflow: "hidden",
     flexShrink: 0,
     marginBottom: 2,
   },
