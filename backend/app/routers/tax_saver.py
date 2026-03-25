@@ -184,7 +184,7 @@ def get_docs(user: UserContext = Depends(get_user_context)):
 
 
 @router.post("/upload/{doc_key}")
-async def upload_document(
+def upload_document(
     doc_key: str,
     file: UploadFile,
     password: Optional[str] = Query(None),
@@ -192,24 +192,34 @@ async def upload_document(
 ):
     """Upload a document, extract its text, and store in tax_docs[doc_key].
 
+    Synchronous route handler (not async) — runs in uvicorn's thread pool.
+    This is critical for CAS PDFs: the Gemini File API extraction takes 30-90s.
+    As an async route, a client disconnect (Cloud Run timeout) cancels the
+    coroutine mid-wait and the DB write never happens. As a sync route,
+    uvicorn runs it in a thread — disconnects do not cancel threads, so
+    Gemini finishes and saves to DB even if the HTTP response never arrives.
+
     Handles:
-    - PDF: uses Gemini File API table extraction (pdf_extractor.py)
-    - XLSX/XLS/XLSM: uses deterministic xlsx_extractor.py (no LLM)
-    - CSV: reads as plain text
+    - PDF: extract_pdf_tables_sync (Gemini File API, blocking)
+    - XLSX/XLS/XLSM: extract_xlsx (openpyxl, instant)
+    - CSV: plain text decode
 
     Returns:
-        {status: "extracted", doc_key, preview}       — success
-        {status: "needs_password"}                     — encrypted file, no password given
-        {status: "wrong_password"}                     — password incorrect
-        {status: "likely_invalid", message}            — content looks wrong
-        {status: "error", message}                     — parse failure
+        {status: "extracted", doc_key, preview}  — success
+        {status: "needs_password"}               — encrypted, no password given
+        {status: "wrong_password"}               — password incorrect
+        {status: "likely_invalid", message}      — not a financial document
+        {status: "error", message}               — parse failure
     """
     from ..whatsapp_bot.document_parser import is_pdf_encrypted, decrypt_pdf
     from ..whatsapp_bot.llm_doc_parser import is_xlsx_encrypted, _decrypt_xlsx
-    from ..services.pdf_extractor import extract_pdf_tables
+    from ..services.pdf_extractor import extract_pdf_tables_sync
     from ..services.xlsx_extractor import extract_xlsx
 
-    raw_bytes = await file.read()
+    # UploadFile.file is a SpooledTemporaryFile — always readable synchronously.
+    # (UploadFile.read() is async, but .file.read() is the underlying sync buffer.)
+    raw_bytes = file.file.read()
+
     if len(raw_bytes) > _MAX_UPLOAD_BYTES:
         return {"status": "error", "message": "File too large. Maximum size is 20 MB."}
 
@@ -234,7 +244,8 @@ async def upload_document(
                     "message": "Incorrect password. Please try your PAN or date of birth (DDMMYYYY).",
                 }
 
-        extracted = await extract_pdf_tables(raw_bytes, filename)
+        # Synchronous Gemini extraction — runs in thread, not cancelled on disconnect
+        extracted = extract_pdf_tables_sync(raw_bytes, filename)
 
     # ── XLSX handling ─────────────────────────────────────────────────────────
     elif _is_xlsx(filename, content_type):
@@ -266,7 +277,7 @@ async def upload_document(
     else:
         return {
             "status": "error",
-            "message": f"Unsupported file type. Please upload a PDF, Excel (.xlsx), or CSV file.",
+            "message": "Unsupported file type. Please upload a PDF, Excel (.xlsx), or CSV file.",
         }
 
     # ── Validate content ──────────────────────────────────────────────────────
@@ -280,20 +291,13 @@ async def upload_document(
         }
 
     # ── Store in tax_docs ─────────────────────────────────────────────────────
-    loop = asyncio.get_running_loop()
-    intake_answers, tax_docs, messages = await loop.run_in_executor(
-        None, load_tax_saver_session, user.user_id
-    )
+    intake_answers, tax_docs, messages = load_tax_saver_session(user.user_id)
 
     if doc_key not in tax_docs:
-        # Allow uploading docs not in the manifest (e.g. extra broker)
         logger.warning(f"upload_document: {doc_key} not in manifest for {user.user_id} — adding")
 
     tax_docs[doc_key] = extracted
-
-    await loop.run_in_executor(
-        None, save_tax_saver_session, user.user_id, intake_answers, tax_docs, messages
-    )
+    save_tax_saver_session(user.user_id, intake_answers, tax_docs, messages)
 
     # Audit record
     try:

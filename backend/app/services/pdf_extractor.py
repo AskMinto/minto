@@ -34,6 +34,58 @@ def _model_id() -> str:
     return model_config._data.get("whatsapp_bot", {}).get("model", "gemini-2.0-flash")
 
 
+def extract_pdf_tables_sync(pdf_bytes: bytes, filename: str = "document.pdf") -> str:
+    """Synchronous version — runs the Gemini File API calls directly (blocking).
+
+    Used from synchronous FastAPI route handlers (run in thread pool by uvicorn).
+    Avoids the async/event-loop cancellation issue when the Cloud Run upstream
+    connection drops mid-wait.
+    """
+    client = _client()
+    model_id = _model_id()
+    import time
+
+    try:
+        file_ref = client.files.upload(
+            file=io.BytesIO(pdf_bytes),
+            config={"mime_type": "application/pdf", "display_name": filename},
+        )
+    except Exception as e:
+        logger.error(f"pdf_extractor_sync: upload failed for {filename}: {e}")
+        return ""
+
+    # Poll for ACTIVE
+    try:
+        for _ in range(30):
+            f = client.files.get(name=file_ref.name)
+            if f.state.name == "ACTIVE":
+                break
+            time.sleep(1)
+        else:
+            logger.error(f"pdf_extractor_sync: file {file_ref.name} never became ACTIVE")
+            return ""
+    except Exception as e:
+        logger.error(f"pdf_extractor_sync: polling failed for {file_ref.name}: {e}")
+        return ""
+
+    extracted = ""
+    try:
+        response = client.models.generate_content(
+            model=model_id,
+            contents=[_EXTRACT_PROMPT, f],
+        )
+        extracted = response.text or ""
+    except Exception as e:
+        logger.error(f"pdf_extractor_sync: generation failed for {file_ref.name}: {e}")
+
+    try:
+        client.files.delete(name=file_ref.name)
+    except Exception as e:
+        logger.warning(f"pdf_extractor_sync: delete failed for {file_ref.name}: {e}")
+
+    return extracted
+
+
 async def extract_pdf_tables(pdf_bytes: bytes, filename: str = "document.pdf") -> str:
     """Upload PDF to Gemini File API, extract all tables as CSV text, delete upload.
 
