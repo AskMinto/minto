@@ -181,38 +181,6 @@ function DocCard({
       setNeedsPassword(false);
       setPassword("");
       setExpanded(false);
-    }
-    // "error" from the hook already handled polling internally for PDFs —
-    // just refresh once here to pick up any late save
-    if (result.status === "error") {
-      setRecovering(true);
-      await onRefreshDocs();
-      setRecovering(false);
-    }
-  };
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    e.target.value = "";
-    setPendingFile(file);
-    const pwd = showPasswordUpfront ? upfrontPassword : undefined;
-    await doUpload(file, pwd || undefined);
-  };
-
-  const handlePasswordSubmit = async () => {
-    if (!pendingFile || !password.trim()) return;
-    setPasswordError("");
-
-    const result = await onUpload(doc.doc_key, pendingFile, password);
-    setUploadResult(result);
-
-    if (result.status === "wrong_password") {
-      setPasswordError(result.message || "Incorrect password. Please try again.");
-    } else if (result.status === "extracted") {
-      setNeedsPassword(false);
-      setPassword("");
-      setExpanded(false);
     } else if (result.status === "error") {
       setRecovering(true);
       await onRefreshDocs();
