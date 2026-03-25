@@ -32,7 +32,7 @@ def _client():
 def _model_id() -> str:
     from ..core.model_config import model_config
     # Use Flash for extraction — fast, cheap, handles table extraction well
-    return model_config._data.get("research_agent", {}).get("model", "gemini-2.0-flash")
+    return model_config._data.get("research_agent", {}).get("model", "gemini-3.1-flash-lite-preview")
 
 
 def extract_pdf_tables_sync(pdf_bytes: bytes, filename: str = "document.pdf") -> str:
@@ -105,7 +105,7 @@ async def extract_pdf_tables(pdf_bytes: bytes, filename: str = "document.pdf") -
         Extracted text string. Empty string on failure.
     """
     client = _client()
-    model_id = _model_id()
+    model_id = "gemini-3.1-flash-lite-preview"
 
     # Upload
     try:
