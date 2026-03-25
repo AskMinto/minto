@@ -228,56 +228,45 @@ _BROKER_DOC_KEYS: dict[str, tuple[str, str]] = {
 def compute_doc_manifest(intake_answers: dict) -> dict:
     """Return an ordered dict of doc_key → None for all required documents.
 
-    The manifest is used as `tax_docs` in the DB — None means not yet uploaded;
-    a non-None string means the extracted text has been stored.
+    Implements US-06 routing exactly:
 
-    Args:
-        intake_answers: dict with keys:
-            income_slab, tax_regime, brokers (list of broker name strings),
-            has_carry_forward (bool), financial_year
+        MF only  + no CF  → CAS
+        MF only  + CF     → CAS → ITR
+        Stocks only + no CF  → P&L → Holdings (per broker)
+        Stocks only + CF     → P&L → Holdings → ITR
+        Both     + no CF  → CAS → P&L → Holdings
+        Both     + CF     → CAS → P&L → Holdings → ITR
 
-    Returns:
-        OrderedDict-like plain dict of {doc_key: None}
+    The `brokers` list from intake_answers contains a mix of two kinds of values:
+      - "Mutual Funds (via CAMS/KFintech)" — signals MF holdings → triggers CAS
+      - Any actual broker name (Zerodha, Groww, …) → triggers P&L + Holdings pair
+
+    The sentinel string for MF is matched via _is_mf_sentinel().
+    Everything else is treated as a demat broker.
     """
     docs: dict[str, None] = {}
 
-    brokers: list[str] = [b.lower() for b in (intake_answers.get("brokers") or [])]
-    has_mf_outside_demat = _has_mf_outside_demat(brokers)
-    has_stocks = _has_stocks(brokers)
-    has_carry_forward = intake_answers.get("has_carry_forward", False)
+    all_selections: list[str] = intake_answers.get("brokers") or []
+    has_carry_forward = bool(intake_answers.get("has_carry_forward", False))
 
-    # CAS PDF — needed if user has mutual funds outside a demat account
-    if has_mf_outside_demat:
+    # Partition into MF sentinel vs actual brokers
+    has_mutual_funds = any(_is_mf_sentinel(s) for s in all_selections)
+    actual_brokers = [s for s in all_selections if not _is_mf_sentinel(s)]
+
+    # ── CAS — only when user has mutual funds ─────────────────────────────────
+    if has_mutual_funds:
         docs["cas_pdf"] = None
 
-    # Broker P&L + Holdings — one pair per broker
-    for broker in intake_answers.get("brokers") or []:
+    # ── P&L + Holdings — one pair per actual demat broker ────────────────────
+    for broker in actual_brokers:
         broker_lower = broker.lower()
-        matched = False
-        for key_pattern, (pnl_key, holdings_key) in _BROKER_DOC_KEYS.items():
-            if key_pattern in broker_lower or broker_lower in key_pattern:
-                if pnl_key not in docs:
-                    docs[pnl_key] = None
-                if holdings_key not in docs:
-                    docs[holdings_key] = None
-                matched = True
-                break
-        if not matched:
-            # Unknown broker — use generic keys suffixed with broker name
-            safe = broker_lower.replace(" ", "_")[:20]
-            pnl_key = f"{safe}_pnl"
-            holdings_key = f"{safe}_holdings"
-            if pnl_key not in docs:
-                docs[pnl_key] = None
-            if holdings_key not in docs:
-                docs[holdings_key] = None
-            # Register instructions for the dynamic keys
-            if pnl_key not in _INSTRUCTIONS:
-                _INSTRUCTIONS[pnl_key] = {**_INSTRUCTIONS["other_broker_pnl"], "label": f"{broker} Tax P&L"}
-            if holdings_key not in _INSTRUCTIONS:
-                _INSTRUCTIONS[holdings_key] = {**_INSTRUCTIONS["other_broker_holdings"], "label": f"{broker} Holdings"}
+        pnl_key, holdings_key = _resolve_broker_keys(broker, broker_lower)
+        if pnl_key not in docs:
+            docs[pnl_key] = None
+        if holdings_key not in docs:
+            docs[holdings_key] = None
 
-    # ITR — needed if user has carry-forward losses
+    # ── ITR — only when user has carry-forward losses ─────────────────────────
     if has_carry_forward:
         docs["itr_pdf"] = None
 
@@ -320,33 +309,31 @@ def get_all_doc_instructions(tax_docs: dict) -> list[dict]:
 
 # ── Private helpers ─────────────────────────────────────────────────────────────
 
-_MF_KEYWORDS = {"mfcentral", "cams", "kfintech", "mutual fund", "mutual funds"}
-_STOCK_KEYWORDS = {
-    "zerodha", "groww", "upstox", "angel", "icici", "hdfc",
-    "sharekhan", "motilal", "kotak", "edelweiss", "5paisa", "other",
-}
-
-# These brokers also hold MFs inside demat — but user still needs CAS for non-demat MFs
-_DEMAT_MF_BROKERS = {"zerodha", "groww", "upstox", "angel"}
+_MF_SENTINEL_KEYWORDS = {"mutual fund", "cams", "kfintech", "mfcentral"}
 
 
-def _has_mf_outside_demat(brokers_lower: list[str]) -> bool:
-    """Return True if any selected broker implies non-demat MF holdings needing a CAS."""
-    # "Mutual Funds (via CAMS/KFintech)" is the sentinel value
-    for b in brokers_lower:
-        if "mutual fund" in b or "cams" in b or "kfintech" in b or "mfcentral" in b:
-            return True
-        # If user selected a demat broker but NOT any explicit MF option, we still
-        # ask for CAS because they may hold MFs via CAMS/KFintech outside demat.
-        # The safest approach: always ask for CAS if they picked ANY broker.
-        # This matches the PRD behaviour.
-    return len(brokers_lower) > 0  # ask for CAS for everyone who has any investment
+def _is_mf_sentinel(selection: str) -> bool:
+    """Return True if this selection represents MF holdings (triggers CAS), not a demat broker."""
+    lower = selection.lower()
+    return any(kw in lower for kw in _MF_SENTINEL_KEYWORDS)
 
 
-def _has_stocks(brokers_lower: list[str]) -> bool:
-    """Return True if user has stock/ETF holdings via a demat broker."""
-    for b in brokers_lower:
-        for kw in _STOCK_KEYWORDS:
-            if kw in b:
-                return True
-    return False
+def _resolve_broker_keys(broker: str, broker_lower: str) -> tuple[str, str]:
+    """Return (pnl_key, holdings_key) for a demat broker name.
+
+    Tries exact/substring match against the known broker table first,
+    then falls back to a generic key derived from the broker name.
+    """
+    for key_pattern, (pnl_key, holdings_key) in _BROKER_DOC_KEYS.items():
+        if key_pattern in broker_lower or broker_lower in key_pattern:
+            return pnl_key, holdings_key
+
+    # Unknown broker — register generic instruction entries on first encounter
+    safe = broker_lower.replace(" ", "_")[:20]
+    pnl_key = f"{safe}_pnl"
+    holdings_key = f"{safe}_holdings"
+    if pnl_key not in _INSTRUCTIONS:
+        _INSTRUCTIONS[pnl_key] = {**_INSTRUCTIONS["other_broker_pnl"], "label": f"{broker} Tax P&L"}
+    if holdings_key not in _INSTRUCTIONS:
+        _INSTRUCTIONS[holdings_key] = {**_INSTRUCTIONS["other_broker_holdings"], "label": f"{broker} Holdings"}
+    return pnl_key, holdings_key

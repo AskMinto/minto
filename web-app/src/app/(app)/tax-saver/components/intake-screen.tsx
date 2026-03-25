@@ -22,8 +22,11 @@ const TAX_REGIMES = [
   { label: "Old Regime", value: "old", desc: "With deductions (80C, HRA etc)" },
 ];
 
+// Mutual funds sentinel — selecting this triggers CAS upload
+const MF_OPTION = { label: "Mutual Funds (via CAMS / KFintech)", value: "Mutual Funds (via CAMS/KFintech)", icon: "🏦" };
+
+// Demat brokers — each triggers a Tax P&L + Holdings pair
 const BROKER_OPTIONS = [
-  { label: "Mutual Funds (CAMS/KFintech)", value: "Mutual Funds (via CAMS/KFintech)", icon: "🏦" },
   { label: "Zerodha", value: "Zerodha", icon: "🟡" },
   { label: "Groww", value: "Groww", icon: "🟢" },
   { label: "Upstox", value: "Upstox", icon: "🟣" },
@@ -152,22 +155,42 @@ export function IntakeScreen({ onSubmit }: Props) {
             </div>
           </QuestionBlock>
 
-          {/* Q3: Brokers / platforms */}
+          {/* Q3: What do you hold */}
           <QuestionBlock
             number={3}
-            question="Where do you invest? Select all that apply."
+            question="What do you invest in? Select all that apply."
             answered={selectedBrokers.length > 0}
           >
-            <div className="flex flex-wrap gap-2">
-              {BROKER_OPTIONS.map((opt) => (
-                <MultiChipButton
-                  key={opt.value}
-                  icon={opt.icon}
-                  label={opt.label}
-                  selected={selectedBrokers.includes(opt.value)}
-                  onClick={() => toggleBroker(opt.value)}
-                />
-              ))}
+            {/* MF option — triggers CAS upload */}
+            <div className="mb-3">
+              <p className="text-[11px] text-minto-text-muted mb-1.5 uppercase tracking-wide font-medium">Mutual Funds</p>
+              <MultiChipButton
+                icon={MF_OPTION.icon}
+                label={MF_OPTION.label}
+                selected={selectedBrokers.includes(MF_OPTION.value)}
+                onClick={() => toggleBroker(MF_OPTION.value)}
+              />
+              {selectedBrokers.includes(MF_OPTION.value) && (
+                <p className="text-[11px] text-minto-accent mt-1.5">→ You'll upload a CAS PDF from MFCentral</p>
+              )}
+            </div>
+            {/* Broker options — each triggers Tax P&L + Holdings */}
+            <div>
+              <p className="text-[11px] text-minto-text-muted mb-1.5 uppercase tracking-wide font-medium">Stocks & ETFs (demat broker)</p>
+              <div className="flex flex-wrap gap-2">
+                {BROKER_OPTIONS.map((opt) => (
+                  <MultiChipButton
+                    key={opt.value}
+                    icon={opt.icon}
+                    label={opt.label}
+                    selected={selectedBrokers.includes(opt.value)}
+                    onClick={() => toggleBroker(opt.value)}
+                  />
+                ))}
+              </div>
+              {selectedBrokers.some((b) => BROKER_OPTIONS.some((o) => o.value === b)) && (
+                <p className="text-[11px] text-minto-accent mt-1.5">→ You'll upload a Tax P&L and Holdings file per broker</p>
+              )}
             </div>
           </QuestionBlock>
 
