@@ -309,7 +309,7 @@ Action types:
 ## Deadline
 
 [One concise line — days to March 31 and T+2 settlement cutoff date if close.]
-
+And also please add a line that says STCG can be carried forward if ITR is filed on time
 ---
 
 *This is an informational analysis, not formal tax advice. Verify with a CA before acting.*
