@@ -137,7 +137,7 @@ async def extract_pdf_tables(pdf_bytes: bytes, filename: str = "document.pdf") -
     try:
         response = await asyncio.to_thread(
             client.models.generate_content,
-            model=model_id,
+            model="gemini-3.1-flash-lite-preview",
             contents=[_EXTRACT_PROMPT, f],
         )
         extracted = response.text or ""

@@ -277,7 +277,6 @@ type ActionType = "HARVEST_LOSS" | "BOOK_LTCG_EXEMPTION" | "AVOID_SELL" | "UPGRA
 
 interface ParsedAction {
   action_type: ActionType;
-  priority: "HIGH" | "MEDIUM" | "LOW";
   instrument_name: string;
   do_this: string;
   you_save: string;
@@ -294,11 +293,7 @@ const ACTION_META: Record<ActionType, { icon: React.ReactNode; colour: string; l
   ELSS_REMINDER:       { icon: <Lock size={13} />,          colour: "text-purple-500 bg-purple-500/10 border-purple-500/20", label: "ELSS Lock-in" },
 };
 
-const PRIORITY_BADGE: Record<string, string> = {
-  HIGH:   "bg-red-500/15 text-red-600 border border-red-500/20",
-  MEDIUM: "bg-amber-500/15 text-amber-600 border border-amber-500/20",
-  LOW:    "bg-slate-500/15 text-slate-500 border border-slate-500/20",
-};
+
 
 // Map plain-English action labels the agent writes → ActionType enum
 const ACTION_TYPE_MAP: Record<string, ActionType> = {
@@ -352,13 +347,8 @@ function parseActionCards(sectionContent: string): ParsedAction[] {
     const lines = block.split("\n");
     const heading = lines[0].trim();
 
-    // heading: "[Action Label] — Instrument Name `PRIORITY`"
-    // or:      "ACTION_TYPE — Instrument Name `PRIORITY`"
-    const priorityMatch = heading.match(/`(HIGH|MEDIUM|LOW)`/i);
-    const priority = (priorityMatch?.[1]?.toUpperCase() ?? "MEDIUM") as ParsedAction["priority"];
-
-    // Strip priority badge from heading
-    const headingClean = heading.replace(/`(HIGH|MEDIUM|LOW)`/gi, "").trim();
+    // Strip any backtick badge (HIGH/MEDIUM/LOW or any other) from heading
+    const headingClean = heading.replace(/`[^`]+`/g, "").trim();
 
     // Split on " — " to get action label and instrument name
     const dashIdx = headingClean.indexOf(" — ");
@@ -384,7 +374,6 @@ function parseActionCards(sectionContent: string): ParsedAction[] {
 
     return {
       action_type,
-      priority,
       instrument_name: instrument,
       do_this:  getField("Do this"),
       you_save: getField("You save"),
@@ -395,9 +384,8 @@ function parseActionCards(sectionContent: string): ParsedAction[] {
   }).filter(a => a.instrument_name);
 }
 
-function ActionCard({ action }: { action: ParsedAction }) {
+function ActionCard({ action, index }: { action: ParsedAction; index: number }) {
   const meta = ACTION_META[action.action_type] ?? ACTION_META.HARVEST_LOSS;
-  const priorityClass = PRIORITY_BADGE[action.priority] ?? PRIORITY_BADGE.MEDIUM;
 
   return (
     <div className={`rounded-xl border p-4 mb-3 ${meta.colour}`}>
@@ -416,8 +404,8 @@ function ActionCard({ action }: { action: ParsedAction }) {
               {action.you_save.startsWith("₹") ? `Save ${action.you_save}` : action.you_save}
             </span>
           )}
-          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase ${priorityClass}`}>
-            {action.priority}
+          <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-white/40 border border-white/50 text-minto-text/70 whitespace-nowrap">
+            Action {index + 1}
           </span>
         </div>
       </div>
@@ -510,7 +498,7 @@ function TaxAnalysisContent({ content, isStreaming }: { content: string; isStrea
                 {STEP_ICONS.step4} Action Plan
               </h2>
               {actions.length > 0
-                ? actions.map((a, j) => <ActionCard key={j} action={a} />)
+                ? actions.map((a, j) => <ActionCard key={j} action={a} index={j} />)
                 : <TaxMarkdown content={section.content} />}
             </div>
           );

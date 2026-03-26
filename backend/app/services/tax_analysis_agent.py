@@ -286,7 +286,7 @@ Be concise. Reference specific numbers from the documents.
 ## Step 4 — Action plan
 
 Ranked by total tax impact (current + future years), largest first.
-
+## Action Plan
 ### [ACTION TYPE] — Instrument Name `HIGH | MEDIUM | LOW`
 **Do this:** One clear sentence. (Must match the action type label.)
 **Tax impact:** ₹X saved / ₹X exemption used / ₹X avoided
