@@ -173,7 +173,7 @@ this year's realised gains but also the FUTURE tax liability on open positions:
 - Since there is no wash-sale rule, explicitly note when the investor can sell and
   immediately repurchase the same instrument to crystallise the loss while
   maintaining market exposure.
-- Do not recommend against harvesting a loss purely because the current-year
+- Recommend harvesting a loss if the current-year
   exemption has not been fully used. The correct test is: will this loss save tax
   now or in future years? If yes, recommend harvesting it.
 </loss_harvesting_logic>
@@ -241,7 +241,7 @@ Be concise. Reference specific numbers from the documents.
 
 ---
 
-## Step 1 — Realised trades this FY
+## Step 1 — Realised trades this FY (grouped by instrument(overall gain/loss))
 
 | Instrument | Exit date | Holding (days) | Type | Gain / Loss | Tax rate | Tax |
 |---|---|---|---|---|---|---|
@@ -287,7 +287,7 @@ Be concise. Reference specific numbers from the documents.
 
 Ranked by total tax impact (current + future years), largest first.
 
-### [ACTION TYPE] — Instrument Name `PRIORITY`
+### [ACTION TYPE] — Instrument Name `HIGH | MEDIUM | LOW`
 **Do this:** One clear sentence. (Must match the action type label.)
 **Tax impact:** ₹X saved / ₹X exemption used / ₹X avoided
 **Current FY impact:** ₹X
