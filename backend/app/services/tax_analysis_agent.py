@@ -22,65 +22,57 @@ def _model_id() -> str:
     return model_config._data.get("tax_web_agent", {}).get("model", "gemini-3-flash-preview")
 
 
+_MODEL_ID = "gpt-5.4"
+
+
 def stream_tax_analysis(
     user_message: str,
     intake_answers: dict,
     tax_docs: dict,
     messages: list[dict],
 ) -> Iterator[str]:
-    """Run the tax analysis agent with true streaming — yields tokens as Gemini produces them.
+    """Run the tax analysis agent, streaming tokens as they arrive.
 
-    For the initial analysis (no messages): passes the full prompt as a single user turn.
-    For follow-up questions (messages exist): passes context once in the system prompt and
-    conversation history as proper role/content message pairs so the agent knows it's
-    in a follow-up context and gives a short, targeted answer instead of re-running
-    the full analysis.
+    Uses the OpenAI SDK directly (gpt-5.4 uses max_completion_tokens,
+    not max_tokens, which Agno's wrapper doesn't handle yet).
+
+    For the initial analysis: full system prompt + context, user message only.
+    For follow-up questions: history passed as proper role/content message pairs
+    so the model gives a targeted answer instead of re-running the full analysis.
     """
-    from agno.agent import Agent, RunEvent
-    from agno.models.google import Gemini
-    from ..core.config import GEMINI_API_KEY
+    from openai import OpenAI
+    from ..core.config import OPENAI_API_KEY
 
     context = _build_context(intake_answers, tax_docs)
-    is_followup = any(m.get("role") == "assistant" for m in messages)
-
-    # Build the system description — always includes context so the agent
-    # can reference specific figures from the documents in follow-up answers
     system = _build_system_prompt() + "\n\n" + context
 
-    # Build proper message history for follow-up turns
-    # Truncate long assistant messages (the full analysis) to avoid token overload
-    history_messages: list[dict] = []
+    # Build message list
+    chat_messages: list[dict] = [{"role": "system", "content": system}]
+
+    is_followup = any(m.get("role") == "assistant" for m in messages)
     if is_followup:
-        recent = messages[-12:]  # last 6 turns
-        for m in recent:
+        for m in messages[-12:]:
             role = m.get("role", "user")
             if role not in ("user", "assistant"):
                 continue
             content = str(m.get("content", ""))
-            # Truncate the big initial analysis response — agent only needs a summary
             if role == "assistant" and len(content) > 1200:
                 content = content[:1200] + "\n\n[... earlier analysis truncated for context ...]"
-            history_messages.append({"role": role, "content": content})
+            chat_messages.append({"role": role, "content": content})
+
+    chat_messages.append({"role": "user", "content": user_message})
 
     try:
-        agent = Agent(
-            model=Gemini(id=_model_id(), api_key=GEMINI_API_KEY),
-            description=system,
-            markdown=True,
+        client = OpenAI(api_key=OPENAI_API_KEY)
+        stream = client.chat.completions.create(
+            model=_MODEL_ID,
+            messages=chat_messages,
             stream=True,
-            add_datetime_to_context=True,
-            timezone_identifier="Asia/Kolkata",
         )
-
-        run_kwargs: dict = {"stream": True, "stream_events": True}
-        if history_messages:
-            run_kwargs["messages"] = history_messages
-
-        for chunk in agent.run(user_message, **run_kwargs):
-            if chunk.event == RunEvent.run_content:
-                token = chunk.content or ""
-                if token:
-                    yield token
+        for chunk in stream:
+            token = chunk.choices[0].delta.content or ""
+            if token:
+                yield token
 
     except Exception as e:
         logger.error(f"tax_analysis_agent: stream_tax_analysis error: {e}", exc_info=True)
