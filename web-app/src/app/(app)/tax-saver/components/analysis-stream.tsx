@@ -381,7 +381,7 @@ function parseActionCards(sectionContent: string): ParsedAction[] {
       deadline,
       caveat,
     };
-  }).filter(a => a.instrument_name);
+  }).filter(a => a.instrument_name && (a.do_this || a.why || a.you_save));
 }
 
 function ActionCard({ action, index }: { action: ParsedAction; index: number }) {
