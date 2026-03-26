@@ -487,19 +487,27 @@ function TaxAnalysisContent({ content, isStreaming }: { content: string; isStrea
   return (
     <div className="space-y-1">
       {sections.map((section, i) => {
-        // Match section titles from the new prompt's ## headings
-        const isPortfolioOverview = section.title.includes("PORTFOLIO") || section.title.includes("WHAT'S IN");
-        const isActionPlan = section.title.includes("ACTION") || section.title.includes("WHAT YOU SHOULD") || section.title.includes("MARCH 31") && section.title.includes("SHOULD");
-        const isTaxSummary = section.title.includes("TAX PICTURE") || section.title.includes("TAX SUMMARY") || section.title.includes("RIGHT NOW");
-        const isDeadline = section.title.includes("TIME LEFT") || section.title.includes("DEADLINE");
+        const t = section.title; // already uppercased
 
-        if (isActionPlan) {
+        const isStep1 = t.includes("STEP 1") || t.includes("REALISED");
+        const isStep2 = t.includes("STEP 2") || t.includes("OPEN POSITION");
+        const isStep3 = t.includes("STEP 3") || t.includes("NET TAX");
+        const isStep4 = t.includes("STEP 4") || t.includes("ACTION PLAN") || t.includes("ACTION");
+        const isDeadline = t.includes("DEADLINE") || t.includes("TIME LEFT");
+
+        const STEP_ICONS: Record<string, string> = {
+          step1: "📋",
+          step2: "📈",
+          step3: "🧮",
+          step4: "✅",
+        };
+
+        if (isStep4) {
           const actions = parseActionCards(section.content);
           return (
             <div key={i} className="glass-card rounded-2xl p-4 mb-3">
               <h2 className="text-[14px] font-semibold text-minto-text mb-3 pb-1.5 border-b border-minto-accent/25 flex items-center gap-2">
-                <CheckCircle size={14} className="text-minto-accent" />
-                What you should do before March 31
+                {STEP_ICONS.step4} Action Plan
               </h2>
               {actions.length > 0
                 ? actions.map((a, j) => <ActionCard key={j} action={a} />)
@@ -508,22 +516,33 @@ function TaxAnalysisContent({ content, isStreaming }: { content: string; isStrea
           );
         }
 
-        if (isTaxSummary) {
+        if (isStep3) {
           return (
             <div key={i} className="glass-card rounded-2xl p-4 mb-3">
               <h2 className="text-[14px] font-semibold text-minto-text mb-3 pb-1.5 border-b border-minto-accent/25">
-                📊 Your tax picture right now
+                {STEP_ICONS.step3} Net Tax Position
               </h2>
               <TaxMarkdown content={section.content} />
             </div>
           );
         }
 
-        if (isPortfolioOverview) {
+        if (isStep2) {
           return (
             <div key={i} className="glass-card rounded-2xl p-4 mb-3">
               <h2 className="text-[14px] font-semibold text-minto-text mb-3 pb-1.5 border-b border-minto-accent/25">
-                📁 What's in your portfolio
+                {STEP_ICONS.step2} Open Positions
+              </h2>
+              <TaxMarkdown content={section.content} />
+            </div>
+          );
+        }
+
+        if (isStep1) {
+          return (
+            <div key={i} className="glass-card rounded-2xl p-4 mb-3">
+              <h2 className="text-[14px] font-semibold text-minto-text mb-3 pb-1.5 border-b border-minto-accent/25">
+                {STEP_ICONS.step1} Realised Trades This FY
               </h2>
               <TaxMarkdown content={section.content} />
             </div>
