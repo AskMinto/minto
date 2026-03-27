@@ -286,6 +286,206 @@ The `<followup_behaviour>` section in the system prompt instructs the model:
 
 ---
 
+---
+
+## File Extraction — Implementation Detail
+
+### PDF Extraction (`backend/app/services/pdf_extractor.py`)
+
+PDFs are always sent to the Gemini File API for table extraction. The function
+runs **synchronously** inside uvicorn's thread pool (the upload route is `def`,
+not `async def`) so a client disconnect cannot cancel it mid-way.
+
+```python
+_EXTRACT_PROMPT = (
+    "Extract all tables and structured data from this financial document. "
+    "For each table, output a CSV block with a header row and all data rows. "
+    "Preserve all numerical values exactly as they appear — do not summarise or omit rows. "
+    "Separate each table with a blank line and a label like '# Table: <description>'. "
+    "Include every page. Do not add commentary — output data only."
+)
+
+def extract_pdf_tables_sync(pdf_bytes: bytes, filename: str = "document.pdf") -> str:
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    model_id = "gemini-3-flash-preview"   # fast, cheap, handles table extraction well
+
+    # 1. Upload to Gemini File API
+    file_ref = client.files.upload(
+        file=io.BytesIO(pdf_bytes),
+        config={"mime_type": "application/pdf", "display_name": filename},
+    )
+
+    # 2. Poll for ACTIVE state (up to 30s)
+    for _ in range(30):
+        f = client.files.get(name=file_ref.name)
+        if f.state.name == "ACTIVE":
+            break
+        time.sleep(1)
+
+    # 3. Generate content — model reads the PDF and extracts all tables as CSV
+    response = client.models.generate_content(
+        model=model_id,
+        contents=[_EXTRACT_PROMPT, f],
+    )
+    extracted = response.text or ""
+
+    # 4. Delete upload immediately (DPDPA — raw file gone within seconds)
+    client.files.delete(name=file_ref.name)
+
+    # 5. If Gemini failed, raise so the router returns a clear error
+    if not extracted:
+        raise RuntimeError("Gemini table extraction failed")
+
+    return extracted
+```
+
+**Why Gemini for PDFs?**
+CAS PDFs from MFCentral are complex multi-page documents with nested tables,
+headers repeated across pages, and varied layouts between CAMS and KFintech formats.
+A rule-based parser would need constant maintenance. Gemini's multimodal capability
+reads the rendered PDF (not just raw text) and extracts the full table structure
+reliably across all formats.
+
+**Why `gemini-3-flash-preview` and not a larger model?**
+Table extraction from a financial PDF is a structured data task, not a reasoning
+task. Flash handles it well and completes in 30–60s vs 90–120s for Pro. The
+extracted output is plain CSV — the heavy reasoning happens in GPT-5.4 later.
+
+**Typical output for a Zerodha MF statement:**
+```
+# Table: Tradewise Exits from 2025-04-01
+,Symbol,ISIN,Entry Date,Exit Date,Quantity,Buy Value,Sell Value,Profit,Period of Holding,...
+,GROWW NIFTY TOTAL MARKET INDEX FUND,INF666M01HM4,2023-11-01,2025-10-14,10060.669,99995.00,139468.04,39473.03,713,...
+
+# Table: Mutual Funds Summary
+,Short Term profit Equity,-3938.3782
+,Long Term profit Equity,66045.1844
+...
+```
+
+---
+
+### XLSX Extraction (`backend/app/services/xlsx_extractor.py`)
+
+Excel files (Zerodha Console exports) are extracted **deterministically** using
+`openpyxl` — no LLM, no network, completes in milliseconds.
+
+The extractor tries three strategies in order per worksheet:
+
+#### Strategy 1 — Named Tables (preferred)
+If the sheet has an Excel Table object (defined range with headers), extract it
+directly via the table's cell reference.
+
+```python
+def _iter_table_rows(ws, tbl) -> Generator:
+    ref = tbl.ref   # e.g. "A1:F50"
+    for row in ws[ref]:
+        values = [cell.value for cell in row]
+        if any(v is not None for v in values):
+            yield values
+```
+
+#### Strategy 2 — Auto-detected Contiguous Blocks (fallback)
+Zerodha's XLSX exports use a sparse layout: metadata rows at the top, then blank
+rows, then the data table. The extractor groups contiguous rows where at least
+2 cells are non-None, separated by blank/sparse rows.
+
+```python
+_MIN_CELLS = 2      # minimum non-empty cells to count as a data row
+_MIN_BLOCK_ROWS = 2 # minimum rows in a block to emit it
+
+def _detect_blocks(all_rows):
+    current_block = []
+    for row in all_rows:
+        non_null_count = sum(1 for v in row if v is not None)
+        if non_null_count >= _MIN_CELLS:
+            current_block.append(list(row))
+        else:
+            if len(current_block) >= _MIN_BLOCK_ROWS:
+                yield current_block   # emit completed block
+            current_block = []
+    if len(current_block) >= _MIN_BLOCK_ROWS:
+        yield current_block
+```
+
+This correctly handles Zerodha's Tax P&L format where each section
+(`Equity and Non Equity`, `Mutual Funds`, `F&O`, etc.) is a separate block
+separated by blank rows.
+
+#### Strategy 3 — Full Sheet Dump (last resort)
+If no named tables and no blocks detected, emit all non-empty rows as a single
+CSV section.
+
+#### Output format
+Each block/table is labelled and separated by blank lines:
+
+```
+# Sheet: Mutual Funds | Block 2
+,Short Term profit Equity,-3938.3782,,,
+,Long Term profit Equity,66045.1844,,,
+
+# Sheet: Mutual Funds | Block 3
+,Symbol,Quantity,Buy Value,Sell Value,Realized P&L
+,TATA SMALL CAP FUND - DIRECT PLAN,713.041,33998.29,31311.06,-2687.24
+,KOTAK SMALL CAP FUND - DIRECT PLAN,159.087,50997.54,47893.94,-3103.60
+...
+
+# Sheet: Open Positions as of 2026-03-24 | Block 1
+...
+```
+
+The labels (`# Sheet: X | Block N`) are included so the LLM can identify which
+part of the document each block came from.
+
+---
+
+### Encrypted File Handling
+
+Both PDF and XLSX encryption is detected and decrypted before extraction.
+
+**PDF — pikepdf:**
+```python
+def is_pdf_encrypted(pdf_bytes: bytes) -> bool:
+    # Try to open with empty password — if it raises, it's encrypted
+    try:
+        with pikepdf.open(io.BytesIO(pdf_bytes), password=""):
+            return False
+    except Exception:
+        return True
+
+def decrypt_pdf(pdf_bytes: bytes, password: str) -> bytes:
+    with pikepdf.open(io.BytesIO(pdf_bytes), password=password) as pdf:
+        out = io.BytesIO()
+        pdf.save(out)
+        return out.getvalue()
+    # Raises pikepdf.PasswordError on wrong password → caught by router → returns wrong_password
+```
+
+**XLSX — msoffcrypto:**
+```python
+def is_xlsx_encrypted(excel_bytes: bytes) -> bool:
+    office_file = msoffcrypto.OfficeFile(io.BytesIO(excel_bytes))
+    return office_file.is_encrypted()
+
+def _decrypt_xlsx(excel_bytes: bytes, password: str) -> bytes:
+    encrypted = io.BytesIO(excel_bytes)
+    decrypted = io.BytesIO()
+    office_file = msoffcrypto.OfficeFile(encrypted)
+    office_file.load_key(password=password)
+    office_file.decrypt(decrypted)
+    return decrypted.getvalue()
+    # Raises ValueError("INCORRECT_PASSWORD") on wrong password
+```
+
+**Why password goes in the URL query string:**
+The upload is multipart (`Content-Type: multipart/form-data`). Adding the
+password to the form body would require parsing it before reading the file.
+Using `?password=xxx` as a query param lets FastAPI resolve it via
+`password: Optional[str] = Query(None)` without touching the form stream.
+The password appears in Cloud Run access logs but is not stored anywhere.
+
+---
+
 ## DPDPA Compliance
 
 - Raw file bytes are **never stored**. They are extracted in memory and discarded.
