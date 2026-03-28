@@ -208,8 +208,8 @@ export function IntakeScreen({ onSubmit }: Props) {
             </p>
             <div className="flex gap-3">
               {[
-                { label: "Yes, I do", value: true },
-                { label: "No / Not sure", value: false },
+                { label: "Yes", value: true },
+                { label: "No", value: false },
               ].map((opt) => (
                 <ChipButton
                   key={String(opt.value)}

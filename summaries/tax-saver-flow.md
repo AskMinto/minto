@@ -802,22 +802,4 @@ the document context which is always present in the system message.
 
 ---
 
-## Key Files
 
-| File | Purpose |
-|---|---|
-| `web-app/src/app/(app)/tax-saver/page.tsx` | Phase router — renders the correct screen |
-| `web-app/src/hooks/use-tax-saver.ts` | All state management + API calls |
-| `web-app/src/app/(app)/tax-saver/components/intake-screen.tsx` | Phase 1 — 4-question chip UI |
-| `web-app/src/app/(app)/tax-saver/components/doc-upload-screen.tsx` | Phase 2 — per-doc upload cards |
-| `web-app/src/app/(app)/tax-saver/components/analysis-stream.tsx` | Phase 3+4 — streaming + section cards |
-| `backend/app/routers/tax_saver.py` | All `/tax-saver/*` API endpoints |
-| `backend/app/services/tax_analysis_agent.py` | GPT-5.4 streaming agent |
-| `backend/app/services/doc_manifest.py` | US-06 document routing matrix + download instructions |
-| `backend/app/services/pdf_extractor.py` | Gemini File API table extraction (sync) |
-| `backend/app/services/xlsx_extractor.py` | openpyxl deterministic XLSX → CSV |
-| `backend/app/whatsapp_bot/web_session_store.py` | Supabase session persistence |
-| `backend/sql/migrations/011_tax_docs_column.sql` | Adds `intake_answers` + `tax_docs` columns |
-| `web-app/src/app/api/proxy/tax-saver/analyse/route.ts` | SSE proxy (maxDuration=300) |
-| `web-app/src/app/api/proxy/tax-saver/chat/route.ts` | Follow-up chat SSE proxy |
-| `web-app/src/app/api/proxy/tax-saver/upload/[doc_key]/route.ts` | Upload proxy (maxDuration=300, streaming) |

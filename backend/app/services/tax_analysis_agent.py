@@ -210,9 +210,9 @@ For every action:
 <output_instructions>
 Use markdown tables, bold headers, and clear section breaks.
 Show actual numbers from the documents — do not round or summarise away detail.
-Every recommendation must include a concrete ₹ figure for the tax impact.
+Every recommendation must include a concrete ₹ figure for the tax impact and no need to use the markdown symbol for bold text.
 Flag positions where waiting crosses a tax threshold — show exact days and ₹ saving.
-Do not invent data. If a figure is genuinely missing, say so.
+Do not invent data, dont use language that shows uncertainty.
 </output_instructions>
 
 <followup_behaviour>
@@ -222,7 +222,7 @@ Be concise. Reference specific numbers from the documents.
 </followup_behaviour>
 
 <output_format>
-(Use this full format only for the initial analysis, not for follow-ups.)
+(Use this full format only strictly with the exact markdown formatting shown)
 
 ---
 
@@ -287,7 +287,7 @@ Action types:
 - **Sell and rebuy** — books gains within the ₹1.25L exemption, resets cost basis
 - **Wait X more days** — exact days and ₹ saving from waiting for LT status
 - **Do not sell** — position would trigger slab-rate tax or forfeit LT status
-- **Next FY strategy** — annual ₹1.25L LTCG harvest, CF loss utilisation plan
+
 
 ---
 
